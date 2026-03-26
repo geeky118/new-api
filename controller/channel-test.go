@@ -92,6 +92,10 @@ func testChannel(channel *model.Channel, testModel string, endpointType string, 
 	}
 
 	endpointType = normalizeChannelTestEndpoint(channel, testModel, endpointType)
+	if channel != nil && channel.Type == constant.ChannelTypeCodex {
+		// Codex responses upstream requires stream=true for test requests.
+		isStream = true
+	}
 
 	requestPath := "/v1/chat/completions"
 
@@ -600,6 +604,10 @@ func detectErrorMessageFromJSONBytes(jsonBytes []byte) string {
 
 func buildTestRequest(model string, endpointType string, channel *model.Channel, isStream bool) dto.Request {
 	testResponsesInput := json.RawMessage(`[{"role":"user","content":"hi"}]`)
+	effectiveStream := isStream
+	if channel != nil && channel.Type == constant.ChannelTypeCodex {
+		effectiveStream = true
+	}
 
 	// 根据端点类型构建不同的测试请求
 	if endpointType != "" {
@@ -631,7 +639,7 @@ func buildTestRequest(model string, endpointType string, channel *model.Channel,
 			return &dto.OpenAIResponsesRequest{
 				Model:  model,
 				Input:  json.RawMessage(`[{"role":"user","content":"hi"}]`),
-				Stream: lo.ToPtr(isStream),
+				Stream: lo.ToPtr(effectiveStream),
 			}
 		case constant.EndpointTypeOpenAIResponseCompact:
 			// 返回 OpenAIResponsesCompactionRequest
@@ -647,7 +655,7 @@ func buildTestRequest(model string, endpointType string, channel *model.Channel,
 			}
 			req := &dto.GeneralOpenAIRequest{
 				Model:  model,
-				Stream: lo.ToPtr(isStream),
+				Stream: lo.ToPtr(effectiveStream),
 				Messages: []dto.Message{
 					{
 						Role:    "user",
@@ -656,7 +664,7 @@ func buildTestRequest(model string, endpointType string, channel *model.Channel,
 				},
 				MaxTokens: lo.ToPtr(maxTokens),
 			}
-			if isStream {
+			if effectiveStream {
 				req.StreamOptions = &dto.StreamOptions{IncludeUsage: true}
 			}
 			return req
@@ -697,14 +705,14 @@ func buildTestRequest(model string, endpointType string, channel *model.Channel,
 		return &dto.OpenAIResponsesRequest{
 			Model:  model,
 			Input:  json.RawMessage(`[{"role":"user","content":"hi"}]`),
-			Stream: lo.ToPtr(isStream),
+			Stream: lo.ToPtr(effectiveStream),
 		}
 	}
 
 	// Chat/Completion 请求 - 返回 GeneralOpenAIRequest
 	testRequest := &dto.GeneralOpenAIRequest{
 		Model:  model,
-		Stream: lo.ToPtr(isStream),
+		Stream: lo.ToPtr(effectiveStream),
 		Messages: []dto.Message{
 			{
 				Role:    "user",
@@ -712,7 +720,7 @@ func buildTestRequest(model string, endpointType string, channel *model.Channel,
 			},
 		},
 	}
-	if isStream {
+	if effectiveStream {
 		testRequest.StreamOptions = &dto.StreamOptions{IncludeUsage: true}
 	}
 
