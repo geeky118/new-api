@@ -104,6 +104,8 @@ func (a *Adaptor) ConvertOpenAIResponsesRequest(c *gin.Context, info *relaycommo
 	// rm max_output_tokens
 	request.MaxOutputTokens = nil
 	request.Temperature = nil
+	// codex: top_p is not supported by upstream responses endpoint
+	request.TopP = nil
 	return request, nil
 }
 
