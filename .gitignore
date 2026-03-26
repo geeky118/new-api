@@ -22,6 +22,12 @@ tiktoken_cache
 web/bun.lock
 plans
 .claude
+gcp-prod-deployer
+run-new-api.out.log
+run-new-api.err.log
+.deploy/
+.npm-cache/
+.tools/
 
 electron/node_modules
 electron/dist

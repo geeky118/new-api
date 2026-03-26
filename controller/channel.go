@@ -524,6 +524,105 @@ func RefreshCodexChannelCredential(c *gin.Context) {
 	})
 }
 
+func SyncCodexChannelPool(c *gin.Context) {
+	channelId, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		common.ApiError(c, fmt.Errorf("invalid channel id: %w", err))
+		return
+	}
+
+	tokenDir := strings.TrimSpace(c.Query("token_dir"))
+	result, err := service.SyncCodexChannelFromTokenDir(channelId, tokenDir)
+	if err != nil {
+		common.SysError("failed to sync codex channel pool: " + err.Error())
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "synced",
+		"data":    result,
+	})
+}
+
+func ReplenishCodexChannelPool(c *gin.Context) {
+	channelId, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		common.ApiError(c, fmt.Errorf("invalid channel id: %w", err))
+		return
+	}
+
+	num := common.String2Int(c.DefaultQuery("num", "1"))
+	if num <= 0 {
+		num = 1
+	}
+	workers := common.String2Int(c.DefaultQuery("workers", "1"))
+	if workers <= 0 {
+		workers = 1
+	}
+	timeoutSec := common.String2Int(c.DefaultQuery("timeout_sec", "1200"))
+	if timeoutSec < 60 {
+		timeoutSec = 60
+	}
+
+	toolDir := strings.TrimSpace(c.Query("tool_dir"))
+	pythonBin := strings.TrimSpace(c.Query("python"))
+	tokenDir := strings.TrimSpace(c.Query("token_dir"))
+	noOAuth, _ := strconv.ParseBool(c.DefaultQuery("no_oauth", "false"))
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), time.Duration(timeoutSec)*time.Second)
+	output, runErr := service.RunCodexRegisterTool(ctx, service.CodexRegisterRunOptions{
+		ToolDir: toolDir,
+		Python:  pythonBin,
+		Count:   num,
+		Workers: workers,
+		NoOAuth: noOAuth,
+	})
+	cancel()
+
+	outputTail := output
+	if len(outputTail) > 2000 {
+		outputTail = outputTail[len(outputTail)-2000:]
+	}
+
+	if runErr != nil {
+		common.SysError("failed to run codex register tool: " + runErr.Error())
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": runErr.Error(),
+			"data": gin.H{
+				"output_tail": outputTail,
+			},
+		})
+		return
+	}
+
+	result, syncErr := service.SyncCodexChannelFromTokenDir(channelId, tokenDir)
+	if syncErr != nil {
+		common.SysError("failed to sync codex channel pool after register: " + syncErr.Error())
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": syncErr.Error(),
+			"data": gin.H{
+				"output_tail": outputTail,
+			},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "replenished",
+		"data": gin.H{
+			"sync_result":  result,
+			"output_tail":  outputTail,
+			"register_num": num,
+			"workers":      workers,
+		},
+	})
+}
+
 type AddChannelRequest struct {
 	Mode                      string                `json:"mode"`
 	MultiKeyMode              constant.MultiKeyMode `json:"multi_key_mode"`
