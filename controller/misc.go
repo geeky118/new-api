@@ -3,7 +3,9 @@ package controller
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -38,6 +40,50 @@ func TestStatus(c *gin.Context) {
 	return
 }
 
+func isLoopbackAddress(addr string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(addr))
+	if normalized == "" {
+		return true
+	}
+	if parsed, err := url.Parse(normalized); err == nil && parsed.Host != "" {
+		normalized = parsed.Host
+	}
+	if strings.Contains(normalized, "@") {
+		parts := strings.Split(normalized, "@")
+		normalized = parts[len(parts)-1]
+	}
+	if host, _, err := net.SplitHostPort(normalized); err == nil {
+		normalized = host
+	}
+	normalized = strings.Trim(normalized, "[]")
+	return normalized == "localhost" || normalized == "127.0.0.1" || normalized == "::1"
+}
+
+func resolveServerAddress(c *gin.Context) string {
+	configuredAddress := strings.TrimSpace(system_setting.ServerAddress)
+	if configuredAddress != "" && !isLoopbackAddress(configuredAddress) {
+		return configuredAddress
+	}
+
+	proto := strings.TrimSpace(c.GetHeader("X-Forwarded-Proto"))
+	if proto == "" {
+		if c.Request.TLS != nil {
+			proto = "https"
+		} else {
+			proto = "http"
+		}
+	}
+	host := strings.TrimSpace(c.GetHeader("X-Forwarded-Host"))
+	if host == "" {
+		host = strings.TrimSpace(c.Request.Host)
+	}
+	if host == "" {
+		return configuredAddress
+	}
+
+	return fmt.Sprintf("%s://%s", proto, host)
+}
+
 func GetStatus(c *gin.Context) {
 
 	cs := console_setting.GetConsoleSetting()
@@ -65,7 +111,7 @@ func GetStatus(c *gin.Context) {
 		"footer_html":                 common.Footer,
 		"wechat_qrcode":               common.WeChatAccountQRCodeImageURL,
 		"wechat_login":                common.WeChatAuthEnabled,
-		"server_address":              system_setting.ServerAddress,
+		"server_address":              resolveServerAddress(c),
 		"turnstile_check":             common.TurnstileCheckEnabled,
 		"turnstile_site_key":          common.TurnstileSiteKey,
 		"top_up_link":                 common.TopUpLink,
@@ -247,6 +293,13 @@ func SendEmailVerification(c *gin.Context) {
 	}
 	localPart := parts[0]
 	domainPart := parts[1]
+	if strings.ToLower(domainPart) != "qq.com" {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "registration only accepts qq.com email",
+		})
+		return
+	}
 	if common.EmailDomainRestrictionEnabled {
 		allowed := false
 		for _, domain := range common.EmailDomainWhitelist {
@@ -317,7 +370,11 @@ func SendPasswordResetEmail(c *gin.Context) {
 	}
 	code := common.GenerateVerificationCode(0)
 	common.RegisterVerificationCodeWithKey(email, code, common.PasswordResetPurpose)
-	link := fmt.Sprintf("%s/user/reset?email=%s&token=%s", system_setting.ServerAddress, email, code)
+	baseAddress := resolveServerAddress(c)
+	if baseAddress == "" {
+		baseAddress = strings.TrimSpace(system_setting.ServerAddress)
+	}
+	link := fmt.Sprintf("%s/user/reset?email=%s&token=%s", baseAddress, email, code)
 	subject := fmt.Sprintf("%s密码重置", common.SystemName)
 	content := fmt.Sprintf("<p>您好，你正在进行%s密码重置。</p>"+
 		"<p>点击 <a href='%s'>此处</a> 进行密码重置。</p>"+

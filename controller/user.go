@@ -29,6 +29,12 @@ type LoginRequest struct {
 	Password string `json:"password"`
 }
 
+func isQQEmail(email string) bool {
+	email = strings.TrimSpace(strings.ToLower(email))
+	parts := strings.Split(email, "@")
+	return len(parts) == 2 && parts[0] != "" && parts[1] == "qq.com"
+}
+
 func Login(c *gin.Context) {
 	if !common.PasswordLoginEnabled {
 		common.ApiErrorI18n(c, i18n.MsgUserPasswordLoginDisabled)
@@ -147,6 +153,14 @@ func Register(c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgUserInputInvalid, map[string]any{"Error": err.Error()})
 		return
 	}
+	if err := common.Validate.Var(user.Email, "required,email"); err != nil {
+		common.ApiError(c, errors.New("registration only accepts qq.com email"))
+		return
+	}
+	if !isQQEmail(user.Email) {
+		common.ApiError(c, errors.New("registration only accepts qq.com email"))
+		return
+	}
 	if common.EmailVerificationEnabled {
 		if user.Email == "" || user.VerificationCode == "" {
 			common.ApiErrorI18n(c, i18n.MsgUserEmailVerificationRequired)
@@ -173,11 +187,9 @@ func Register(c *gin.Context) {
 		Username:    user.Username,
 		Password:    user.Password,
 		DisplayName: user.Username,
+		Email:       user.Email,
 		InviterId:   inviterId,
 		Role:        common.RoleCommonUser, // 明确设置角色为普通用户
-	}
-	if common.EmailVerificationEnabled {
-		cleanUser.Email = user.Email
 	}
 	if err := cleanUser.Insert(inviterId); err != nil {
 		common.ApiError(c, err)
