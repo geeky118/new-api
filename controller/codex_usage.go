@@ -17,6 +17,11 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+type codexUsageCredential struct {
+	KeyIndex int
+	OAuthKey *codex.OAuthKey
+}
+
 func GetCodexChannelUsage(c *gin.Context) {
 	channelId, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -37,25 +42,10 @@ func GetCodexChannelUsage(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": "channel type is not Codex"})
 		return
 	}
-	if ch.ChannelInfo.IsMultiKey {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "multi-key channel is not supported"})
-		return
-	}
 
-	oauthKey, err := codex.ParseOAuthKey(strings.TrimSpace(ch.Key))
-	if err != nil {
-		common.SysError("failed to parse oauth key: " + err.Error())
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "解析凭证失败，请检查渠道配置"})
-		return
-	}
-	accessToken := strings.TrimSpace(oauthKey.AccessToken)
-	accountID := strings.TrimSpace(oauthKey.AccountID)
-	if accessToken == "" {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "codex channel: access_token is required"})
-		return
-	}
-	if accountID == "" {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "codex channel: account_id is required"})
+	credentials := collectCodexUsageCredentials(ch)
+	if len(credentials) == 0 {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "no available codex credentials in channel"})
 		return
 	}
 
@@ -65,46 +55,81 @@ func GetCodexChannelUsage(c *gin.Context) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
-	defer cancel()
+	var (
+		selectedCred *codexUsageCredential
+		statusCode   int
+		body         []byte
+		lastErr      error
+	)
 
-	statusCode, body, err := service.FetchCodexWhamUsage(ctx, client, ch.GetBaseURL(), accessToken, accountID)
-	if err != nil {
-		common.SysError("failed to fetch codex usage: " + err.Error())
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "获取用量信息失败，请稍后重试"})
-		return
-	}
+	for i := range credentials {
+		cred := &credentials[i]
+		accessToken := strings.TrimSpace(cred.OAuthKey.AccessToken)
+		accountID := strings.TrimSpace(cred.OAuthKey.AccountID)
+		if accessToken == "" || accountID == "" {
+			continue
+		}
 
-	if (statusCode == http.StatusUnauthorized || statusCode == http.StatusForbidden) && strings.TrimSpace(oauthKey.RefreshToken) != "" {
-		refreshCtx, refreshCancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
-		defer refreshCancel()
+		reqCtx, reqCancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
+		respStatus, respBody, fetchErr := service.FetchCodexWhamUsage(reqCtx, client, ch.GetBaseURL(), accessToken, accountID)
+		reqCancel()
 
-		res, refreshErr := service.RefreshCodexOAuthTokenWithProxy(refreshCtx, oauthKey.RefreshToken, ch.GetSetting().Proxy)
-		if refreshErr == nil {
-			oauthKey.AccessToken = res.AccessToken
-			oauthKey.RefreshToken = res.RefreshToken
-			oauthKey.LastRefresh = time.Now().Format(time.RFC3339)
-			oauthKey.Expired = res.ExpiresAt.Format(time.RFC3339)
-			if strings.TrimSpace(oauthKey.Type) == "" {
-				oauthKey.Type = "codex"
-			}
+		if fetchErr != nil {
+			lastErr = fetchErr
+			continue
+		}
 
-			encoded, encErr := common.Marshal(oauthKey)
-			if encErr == nil {
-				_ = model.DB.Model(&model.Channel{}).Where("id = ?", ch.Id).Update("key", string(encoded)).Error
-				model.InitChannelCache()
-				service.ResetProxyClientCache()
-			}
+		if (respStatus == http.StatusUnauthorized || respStatus == http.StatusForbidden) && strings.TrimSpace(cred.OAuthKey.RefreshToken) != "" {
+			refreshCtx, refreshCancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+			res, refreshErr := service.RefreshCodexOAuthTokenWithProxy(refreshCtx, cred.OAuthKey.RefreshToken, ch.GetSetting().Proxy)
+			refreshCancel()
+			if refreshErr == nil {
+				cred.OAuthKey.AccessToken = res.AccessToken
+				cred.OAuthKey.RefreshToken = res.RefreshToken
+				cred.OAuthKey.LastRefresh = time.Now().Format(time.RFC3339)
+				cred.OAuthKey.Expired = res.ExpiresAt.Format(time.RFC3339)
+				if strings.TrimSpace(cred.OAuthKey.Type) == "" {
+					cred.OAuthKey.Type = "codex"
+				}
 
-			ctx2, cancel2 := context.WithTimeout(c.Request.Context(), 15*time.Second)
-			defer cancel2()
-			statusCode, body, err = service.FetchCodexWhamUsage(ctx2, client, ch.GetBaseURL(), oauthKey.AccessToken, accountID)
-			if err != nil {
-				common.SysError("failed to fetch codex usage after refresh: " + err.Error())
-				c.JSON(http.StatusOK, gin.H{"success": false, "message": "获取用量信息失败，请稍后重试"})
-				return
+				persistCodexUsageOAuthKey(ch, cred.KeyIndex, cred.OAuthKey)
+
+				retryCtx, retryCancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
+				respStatus, respBody, fetchErr = service.FetchCodexWhamUsage(retryCtx, client, ch.GetBaseURL(), cred.OAuthKey.AccessToken, accountID)
+				retryCancel()
 			}
 		}
+
+		if fetchErr != nil {
+			lastErr = fetchErr
+			continue
+		}
+
+		if selectedCred == nil {
+			selectedCred = cred
+			statusCode = respStatus
+			body = respBody
+		}
+
+		if respStatus >= http.StatusOK && respStatus < http.StatusMultipleChoices {
+			selectedCred = cred
+			statusCode = respStatus
+			body = respBody
+			break
+		}
+		if !ch.ChannelInfo.IsMultiKey {
+			break
+		}
+	}
+
+	if selectedCred == nil || len(body) == 0 {
+		if lastErr != nil {
+			common.SysError("failed to fetch codex usage: " + lastErr.Error())
+		} else {
+			common.SysError("failed to fetch codex usage: no usable response")
+		}
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "failed to fetch codex usage"})
+		return
 	}
 
 	var payload any
@@ -118,9 +143,90 @@ func GetCodexChannelUsage(c *gin.Context) {
 		"message":         "",
 		"upstream_status": statusCode,
 		"data":            payload,
+		"meta": gin.H{
+			"is_multi_key":     ch.ChannelInfo.IsMultiKey,
+			"key_index":        selectedCred.KeyIndex,
+			"candidate_count":  len(credentials),
+			"selected_email":   strings.TrimSpace(selectedCred.OAuthKey.Email),
+			"selected_account": strings.TrimSpace(selectedCred.OAuthKey.AccountID),
+		},
 	}
 	if !ok {
 		resp["message"] = fmt.Sprintf("upstream status: %d", statusCode)
 	}
 	c.JSON(http.StatusOK, resp)
+}
+
+func collectCodexUsageCredentials(ch *model.Channel) []codexUsageCredential {
+	result := make([]codexUsageCredential, 0)
+	if ch == nil {
+		return result
+	}
+
+	if !ch.ChannelInfo.IsMultiKey {
+		oauthKey, err := codex.ParseOAuthKey(strings.TrimSpace(ch.Key))
+		if err != nil {
+			return result
+		}
+		if strings.TrimSpace(oauthKey.AccessToken) == "" || strings.TrimSpace(oauthKey.AccountID) == "" {
+			return result
+		}
+		result = append(result, codexUsageCredential{
+			KeyIndex: 0,
+			OAuthKey: oauthKey,
+		})
+		return result
+	}
+
+	statusList := ch.ChannelInfo.MultiKeyStatusList
+	keys := ch.GetKeys()
+	for i, rawKey := range keys {
+		if statusList != nil {
+			if s, ok := statusList[i]; ok && s != common.ChannelStatusEnabled {
+				continue
+			}
+		}
+		oauthKey, err := codex.ParseOAuthKey(strings.TrimSpace(rawKey))
+		if err != nil {
+			continue
+		}
+		if strings.TrimSpace(oauthKey.AccessToken) == "" || strings.TrimSpace(oauthKey.AccountID) == "" {
+			continue
+		}
+		result = append(result, codexUsageCredential{
+			KeyIndex: i,
+			OAuthKey: oauthKey,
+		})
+	}
+	return result
+}
+
+func persistCodexUsageOAuthKey(ch *model.Channel, keyIndex int, oauthKey *codex.OAuthKey) {
+	if ch == nil || oauthKey == nil {
+		return
+	}
+	encoded, err := common.Marshal(oauthKey)
+	if err != nil {
+		return
+	}
+	newKey := strings.TrimSpace(string(encoded))
+	if newKey == "" {
+		return
+	}
+
+	if ch.ChannelInfo.IsMultiKey {
+		keys := ch.GetKeys()
+		if keyIndex < 0 || keyIndex >= len(keys) {
+			return
+		}
+		keys[keyIndex] = newKey
+		newKey = strings.Join(keys, "\n")
+	}
+
+	if err = model.DB.Model(&model.Channel{}).Where("id = ?", ch.Id).Update("key", newKey).Error; err != nil {
+		return
+	}
+	ch.Key = newKey
+	model.InitChannelCache()
+	service.ResetProxyClientCache()
 }
