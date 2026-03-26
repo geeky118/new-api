@@ -72,10 +72,15 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 	adaptor.Init(info)
 
 	passThroughGlobal := model_setting.GetGlobalSettings().PassThroughRequestEnabled
-	if info.RelayMode == relayconstant.RelayModeChatCompletions &&
-		!passThroughGlobal &&
-		!info.ChannelSetting.PassThroughBodyEnabled &&
-		service.ShouldChatCompletionsUseResponsesGlobal(info.ChannelId, info.ChannelType, info.OriginModelName) {
+	shouldForceResponsesForCodex :=
+		info.RelayMode == relayconstant.RelayModeChatCompletions &&
+			info.ChannelType == constant.ChannelTypeCodex
+	shouldUseResponsesCompatByPolicy :=
+		info.RelayMode == relayconstant.RelayModeChatCompletions &&
+			!passThroughGlobal &&
+			!info.ChannelSetting.PassThroughBodyEnabled &&
+			service.ShouldChatCompletionsUseResponsesGlobal(info.ChannelId, info.ChannelType, info.OriginModelName)
+	if shouldForceResponsesForCodex || shouldUseResponsesCompatByPolicy {
 		applySystemPromptIfNeeded(c, info, request)
 		usage, newApiErr := chatCompletionsViaResponses(c, info, adaptor, request)
 		if newApiErr != nil {

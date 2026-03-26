@@ -148,16 +148,42 @@ const renderTagType = (t) => {
   );
 };
 
+const getMultiKeyAccountStats = (channelInfo) => {
+  if (!channelInfo?.is_multi_key) {
+    return null;
+  }
+
+  const statusList =
+    channelInfo.multi_key_status_list &&
+    typeof channelInfo.multi_key_status_list === 'object'
+      ? channelInfo.multi_key_status_list
+      : {};
+  const disabledCount = Object.keys(statusList).length;
+  const sizeNum = Number(channelInfo.multi_key_size);
+  const totalCount = Number.isFinite(sizeNum)
+    ? Math.max(sizeNum, disabledCount)
+    : disabledCount;
+  const enabledCount = Math.max(totalCount - disabledCount, 0);
+
+  return {
+    totalCount,
+    enabledCount,
+    disabledCount,
+  };
+};
+
 const renderStatus = (status, channelInfo = undefined, t) => {
   if (channelInfo) {
     if (channelInfo.is_multi_key) {
-      let keySize = channelInfo.multi_key_size;
-      let enabledKeySize = keySize;
-      if (channelInfo.multi_key_status_list) {
-        enabledKeySize =
-          keySize - Object.keys(channelInfo.multi_key_status_list).length;
+      const stats = getMultiKeyAccountStats(channelInfo);
+      if (stats) {
+        return renderMultiKeyStatus(
+          status,
+          stats.totalCount,
+          stats.enabledCount,
+          t,
+        );
       }
-      return renderMultiKeyStatus(status, keySize, enabledKeySize, t);
     }
   }
   switch (status) {
@@ -215,6 +241,30 @@ const renderMultiKeyStatus = (status, keySize, enabledKeySize, t) => {
         </Tag>
       );
   }
+};
+
+const renderAvailableAccounts = (record, t) => {
+  if (record.children !== undefined) {
+    return '-';
+  }
+  const stats = getMultiKeyAccountStats(record.channel_info);
+  if (!stats) {
+    return '-';
+  }
+
+  const tagColor = stats.enabledCount > 0 ? 'green' : 'red';
+  return (
+    <Tooltip
+      content={t('可用账号 ${enabled} / 总账号 ${total} / 不可用 ${disabled}')
+        .replace('${enabled}', stats.enabledCount)
+        .replace('${total}', stats.totalCount)
+        .replace('${disabled}', stats.disabledCount)}
+    >
+      <Tag color={tagColor} shape='circle'>
+        {stats.enabledCount}/{stats.totalCount}
+      </Tag>
+    </Tooltip>
+  );
 };
 
 const renderResponseTime = (responseTime, t) => {
@@ -515,6 +565,12 @@ export const getChannelsColumns = ({
           return renderStatus(text, record.channel_info, t);
         }
       },
+    },
+    {
+      key: COLUMN_KEYS.AVAILABLE_ACCOUNTS,
+      title: t('可用账号数'),
+      dataIndex: 'channel_info',
+      render: (text, record, index) => renderAvailableAccounts(record, t),
     },
     {
       key: COLUMN_KEYS.RESPONSE_TIME,
