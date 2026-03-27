@@ -26,11 +26,24 @@ import (
 
 type LoginRequest struct {
 	Username string `json:"username"`
+	Email    string `json:"email"`
 	Password string `json:"password"`
 }
 
+func normalizeEmail(email string) string {
+	return strings.TrimSpace(strings.ToLower(email))
+}
+
+func normalizeLoginIdentifier(identifier string) string {
+	identifier = strings.TrimSpace(identifier)
+	if strings.Contains(identifier, "@") {
+		return strings.ToLower(identifier)
+	}
+	return identifier
+}
+
 func isQQEmail(email string) bool {
-	email = strings.TrimSpace(strings.ToLower(email))
+	email = normalizeEmail(email)
 	parts := strings.Split(email, "@")
 	return len(parts) == 2 && parts[0] != "" && parts[1] == "qq.com"
 }
@@ -41,12 +54,15 @@ func Login(c *gin.Context) {
 		return
 	}
 	var loginRequest LoginRequest
-	err := json.NewDecoder(c.Request.Body).Decode(&loginRequest)
+	err := common.DecodeJson(c.Request.Body, &loginRequest)
 	if err != nil {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 		return
 	}
-	username := loginRequest.Username
+	username := normalizeLoginIdentifier(loginRequest.Username)
+	if username == "" {
+		username = normalizeLoginIdentifier(loginRequest.Email)
+	}
 	password := loginRequest.Password
 	if username == "" || password == "" {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
@@ -144,7 +160,7 @@ func Register(c *gin.Context) {
 		return
 	}
 	var user model.User
-	err := json.NewDecoder(c.Request.Body).Decode(&user)
+	err := common.DecodeJson(c.Request.Body, &user)
 	if err != nil {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 		return
@@ -154,7 +170,7 @@ func Register(c *gin.Context) {
 		return
 	}
 	user.Username = strings.TrimSpace(user.Username)
-	user.Email = strings.TrimSpace(strings.ToLower(user.Email))
+	user.Email = normalizeEmail(user.Email)
 	if user.Username == "" || user.Email == "" || user.Password == "" {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 		return

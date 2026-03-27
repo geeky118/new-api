@@ -275,7 +275,7 @@ func GetHomePageContent(c *gin.Context) {
 }
 
 func SendEmailVerification(c *gin.Context) {
-	email := c.Query("email")
+	email := normalizeEmail(c.Query("email"))
 	if err := common.Validate.Var(email, "required,email"); err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -293,7 +293,7 @@ func SendEmailVerification(c *gin.Context) {
 	}
 	localPart := parts[0]
 	domainPart := parts[1]
-	if strings.ToLower(domainPart) != "qq.com" {
+	if !isQQEmail(email) {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": "registration only accepts qq.com email",

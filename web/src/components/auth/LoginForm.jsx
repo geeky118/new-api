@@ -216,6 +216,8 @@ const LoginForm = () => {
   }
 
   async function handleSubmit(e) {
+    const normalizedIdentifier = (username || '').trim();
+    const normalizedPassword = password || '';
     if ((hasUserAgreement || hasPrivacyPolicy) && !agreedToTerms) {
       showInfo(t('请先阅读并同意用户协议和隐私政策'));
       return;
@@ -227,12 +229,15 @@ const LoginForm = () => {
     setSubmitted(true);
     setLoginLoading(true);
     try {
-      if (username && password) {
+      if (normalizedIdentifier && normalizedPassword) {
+        const loginIdentifier = normalizedIdentifier.includes('@')
+          ? normalizedIdentifier.toLowerCase()
+          : normalizedIdentifier;
         const res = await API.post(
           `/api/user/login?turnstile=${turnstileToken}`,
           {
-            username,
-            password,
+            username: loginIdentifier,
+            password: normalizedPassword,
           },
         );
         const { success, message, data } = res.data;
@@ -248,7 +253,7 @@ const LoginForm = () => {
           setUserData(data);
           updateAPI();
           showSuccess('登录成功！');
-          if (username === 'root' && password === '123456') {
+          if (loginIdentifier === 'root' && normalizedPassword === '123456') {
             Modal.error({
               title: '您正在使用默认密码！',
               content: '请立刻修改默认密码！',
