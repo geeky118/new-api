@@ -74,6 +74,7 @@ const RegisterForm = () => {
     timeout: '请求超时，请刷新页面后重新发起 GitHub 登录',
   };
   const [inputs, setInputs] = useState({
+    username: '',
     password: '',
     password2: '',
     email: '',
@@ -214,17 +215,17 @@ const RegisterForm = () => {
     setInputs((inputs) => ({ ...inputs, [name]: value }));
   }
 
-  const buildUsernameFromEmail = (email) => {
-    const localPart = email
-      .split('@')[0]
-      .replace(/[^a-zA-Z0-9_]/g, '')
-      .toLowerCase();
-    const base = localPart || 'qquser';
-    const suffix = Date.now().toString().slice(-6);
-    return `${base.slice(0, 13)}_${suffix}`.slice(0, 20);
-  };
-
   async function handleSubmit(e) {
+    const normalizedUsername = (inputs.username || '').trim();
+    const normalizedEmail = (inputs.email || '').trim().toLowerCase();
+    if (!normalizedUsername) {
+      showInfo(t('请输入用户名'));
+      return;
+    }
+    if (normalizedUsername.length > 20) {
+      showInfo('用户名长度不能超过 20 位！');
+      return;
+    }
     if (password.length < 8) {
       showInfo('密码长度不得小于 8 位！');
       return;
@@ -233,7 +234,6 @@ const RegisterForm = () => {
       showInfo('两次输入的密码不一致');
       return;
     }
-    const normalizedEmail = (inputs.email || '').trim().toLowerCase();
     if (!/^[^@\s]+@qq\.com$/.test(normalizedEmail)) {
       showInfo('仅支持 qq.com 邮箱注册');
       return;
@@ -256,7 +256,7 @@ const RegisterForm = () => {
           ...inputs,
           aff_code: affCode,
           email: normalizedEmail,
-          username: buildUsernameFromEmail(normalizedEmail),
+          username: normalizedUsername,
         };
         const res = await API.post(
           `/api/user/register?turnstile=${turnstileToken}`,
@@ -560,7 +560,7 @@ const RegisterForm = () => {
                   onClick={handleEmailRegisterClick}
                   loading={emailRegisterLoading}
                 >
-                  <span className='ml-3'>{t('使用 用户名 注册')}</span>
+                  <span className='ml-3'>{t('使用 邮箱和用户名 注册')}</span>
                 </Button>
               </div>
 
@@ -601,6 +601,15 @@ const RegisterForm = () => {
             </div>
             <div className='px-2 py-8'>
               <Form className='space-y-3'>
+                <Form.Input
+                  field='username'
+                  label={t('用户名')}
+                  placeholder={t('请输入用户名')}
+                  name='username'
+                  onChange={(value) => handleChange('username', value)}
+                  prefix={<IconUser />}
+                />
+
                 {!showEmailVerification && (
                   <Form.Input
                     field='email'

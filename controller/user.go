@@ -153,6 +153,12 @@ func Register(c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgUserInputInvalid, map[string]any{"Error": err.Error()})
 		return
 	}
+	user.Username = strings.TrimSpace(user.Username)
+	user.Email = strings.TrimSpace(strings.ToLower(user.Email))
+	if user.Username == "" || user.Email == "" || user.Password == "" {
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
 	if err := common.Validate.Var(user.Email, "required,email"); err != nil {
 		common.ApiError(c, errors.New("registration only accepts qq.com email"))
 		return

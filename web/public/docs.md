@@ -1,18 +1,19 @@
-# 🚀 RK-API 用户接入文档
-欢迎使用 **RK-API** 🎉
+# 🚀用户接入文档
+
 本篇文档将带你快速完成接入。无论你是普通用户，还是喜欢折腾命令行的开发者，都可以按照本教程一步一步操作。
 你将学会：
+
 * 🔑 如何获取自己的 API Key
-* 🍒 如何在 Cherry Studio 中接入 RK-API
-* 💻 如何在 Codex CLI 中接入 RK-API
+* 🍒 如何在 Cherry Studio 中接入 NEW-API
+* 💻 如何在 Codex CLI 中接入 NEW-API
 * 🧪 如何通过 cURL / Python 测试接口是否正常
 ---
 # 🧭 导航目录
 * [📌 一、准备工作：先获取 API Key](#📌-一、准备工作：先获取-api-key)
 * [🍒 二、Cherry Studio 接入教程](#🍒-二、cherry-studio-接入教程（推荐新手优先使用）)
-* [💻 三、Codex CLI 接入 RK-API](#💻-三、codex-cli-接入-rk-api（终端用户重点看）)
-* [🧪 四、使用 cURL 测试 RK-API](#🧪-四、使用-curl-测试-rk-api)
-* [🐍 五、Python 接入 RK-API](#🐍-五、python-接入-rk-api)
+* [💻 三、Codex CLI 接入 NEW-API](#💻-三、codex-cli-接入-NEW-api（终端用户重点看）)
+* [🧪 四、使用 cURL 测试 NEW-API](#🧪-四、使用-curl-测试-NEW-api)
+* [🐍 五、Python 接入 NEW-API](#🐍-五、python-接入-NEW-api)
 * [🎯 六、推荐使用方式](#🎯-六、推荐使用方式)
 * [🔒 七、安全提醒](#%F0%9F%94%92-七、安全提醒)
 * [📚 八、信息速查](#📚-八、信息速查)
@@ -23,10 +24,10 @@
 * [🎉 十三、结语](#🎉-十三、结语)
 ---
 # 📌 一、准备工作：先获取 API Key
-在使用 RK-API 之前，你需要先创建一把自己的 **API Key**。
+在使用 NEW-API 之前，你需要先创建一把自己的 **API Key**。
 它相当于你的“调用凭证”，没有它就无法使用接口。
 ## 获取步骤
-1. 打开控制台：[https://ai.rosekhlifa.cn](https://ai.rosekhlifa.cn)
+1. 打开控制台：[https://newapi.hello4am.com/v1](https://newapi.hello4am.com/v1)
 2. 使用你的 **QQ 邮箱** 注册并登录
 3. 进入左侧菜单栏 **令牌**
 4. 点击右上角 **添加新的令牌**
@@ -41,7 +42,7 @@
 ```text
 sk-xxxxxxxxxxxxxxxxxxxxxxxx
 ```
-![RK-API 控制台创建令牌示意图](./images/create-token.png)
+![NEW-API 控制台创建令牌示意图](./images/create-token.png)
 ## ⚠️ 注意事项
 * API Key 非常重要，请不要泄露给他人
 * 不要发到群聊、论坛、截图公开
@@ -61,17 +62,17 @@ sk-xxxxxxxxxxxxxxxxxxxxxxxx
 ## 1️⃣ 下载并安装 Cherry Studio
 前往 [Cherry Studio 官网](https://www.cherry-ai.com/) 下载安装包，安装完成后打开软件。
 ---
-## 2️⃣ 添加 RK-API 服务
+## 2️⃣ 添加 NEW-API 服务
 打开 Cherry Studio 后，进入：
 **设置** → **服务商** → **OpenAI**
 如果你走的是兼容接口模式，也可以选择：
 **OpenAI 兼容协议**
 然后按下面填写：
-* **API 地址（Base URL）**：`https://api.rosekhlifa.cn/v1`
+* **API 地址（Base URL）**：`https://newapi.hello4am.com/v1`
 * **API 密钥（API Key）**：填写你刚才复制的 `sk-...`
 > ✅ 提示：
 > 地址最后的 `/v1` 一般不要漏掉。
-![Cherry Studio 接入 RK-API 配置示意图](./images/cherry-config.png)
+![Cherry Studio 接入 NEW-API 配置示意图](./images/cherry-config.png)
 ---
 ## 3️⃣ 添加模型
 在设置页面中找到 **自定义模型**，点击添加：
@@ -93,7 +94,7 @@ gpt-2-codex
 * 💬 多轮追问和持续对话
 对于大多数普通用户来说，**Cherry Studio 已经够用了**。
 ---
-# 💻 三、Codex CLI 接入 RK-API（终端用户重点看）
+# 💻 三、Codex CLI 接入 NEW-API（终端用户重点看）
 如果你更喜欢在终端中工作，或者希望把模型能力融入自己的命令行工作流，那么可以使用 **Codex CLI**。
 ![Codex CLI 使用示意图](./images/codexcli-display.png)
 ---
@@ -118,15 +119,16 @@ codex --version
 如果终端能正确输出版本号，说明 CLI 已经安装完成。Codex CLI 的命令和参数会继承 `~/.codex/config.toml` 中的默认配置，这一点也在官方命令参考页中有说明。
 ![Codex CLI 安装示意图](./images/codexcli-install.png)
 ---
-## 3️⃣ RK-API 接口地址
-RK-API 的接口地址如下：
+## 3️⃣ NEW-API 接口地址
+NEW-API 的接口地址如下：
 ```text
-https://api.rosekhlifa.cn/v1
+https://newapi.hello4am.com/v1
 ```
 ---
 ## 4️⃣ 找到 Codex 配置目录
 Codex 的配置通常使用 `.codex` 目录和 `config.toml` 文件。OpenAI 官方配置文档说明，CLI 和其他相关入口会共享配置层；常见做法是使用用户级配置，必要时也可以在项目内放置 `.codex/config.toml`。
 在 Windows 系统下，常见位置通常可以写成：
+
 ```text
 C:\Users\你的用户名\.codex
 ```
@@ -145,7 +147,7 @@ auth.json
 填入以下内容：
 ```json
 {
-  "OPENAI_API_KEY": "sk-你的RK-API密钥"
+  "OPENAI_API_KEY": "sk-你的NEW-API密钥"
 }
 ```
 请把 `sk-********` 替换成你自己的真实密钥。
@@ -158,24 +160,24 @@ config.toml
 ```
 填入以下内容：
 ```toml
-model_provider = "rkapi"
+model_provider = "NEWapi"
 personality = "pragmatic"
 model = "gpt-5.2-codex"
 model_reasoning_effort = "medium"
 preferred_auth_method = "apikey"
 
-[model_providers.rkapi]
-name = "RK-API"
-base_url = "https://api.rosekhlifa.cn/v1"
+[model_providers.NEWapi]
+name = "NEW-API"
+base_url = "https://newapi.hello4am.com/v1"
 wire_api = "responses"
 ```
 
-![Codex CLI config.toml 配置 RK-API 示意图](./images/codex-config-toml.png)
----
+
+
 ## 7️⃣ 配置参数说明
 为了方便新手理解，这里简单解释一下这些字段的含义：
-* `model_provider = "rkapi"`
-  表示当前使用名为 `rkapi` 的服务提供方
+* `model_provider = "NEWapi"`
+  表示当前使用名为 `NEWapi` 的服务提供方
 * `personality = "pragmatic"`
   表示 Codex CLI 的默认风格，通常保持默认即可
 * `model = "gpt-5.2-codex"`
@@ -184,12 +186,12 @@ wire_api = "responses"
   表示推理强度设为中等，适合大多数代码场景
 * `preferred_auth_method = "apikey"`
   表示优先通过 API Key 进行鉴权
-* `[model_providers.rkapi]`
-  这里定义的是 RK-API 这一组服务配置
-* `name = "RK-API"`
+* `[model_providers.NEWapi]`
+  这里定义的是 NEW-API 这一组服务配置
+* `name = "NEW-API"`
   只是显示名称，方便识别
-* `base_url = "https://api.rosekhlifa.cn/v1"`
-  这里填写 RK-API 的接口地址
+* `base_url = "https://newapi.hello4am.com/v1"`
+  这里填写 NEW-API 的接口地址
 * `wire_api = "responses"`
   表示通过 `responses` 方式接入
 ---
@@ -204,20 +206,20 @@ C:\Users\你的用户名\.codex
 ### `auth.json`
 ```json
 {
-  "OPENAI_API_KEY": "sk-你的RK-API密钥"
+  "OPENAI_API_KEY": "sk-你的NEW-API密钥"
 }
 ```
 ### `config.toml`
 ```toml
-model_provider = "rkapi"
+model_provider = "NEWapi"
 personality = "pragmatic"
 model = "gpt-5.2-codex"
 model_reasoning_effort = "medium"
 preferred_auth_method = "apikey"
 
-[model_providers.rkapi]
-name = "RK-API"
-base_url = "https://api.rosekhlifa.cn/v1"
+[model_providers.NEWapi]
+name = "NEW-API"
+base_url = "https://newapi.hello4am.com/v1"
 wire_api = "responses"
 ```
 ---
@@ -227,7 +229,7 @@ wire_api = "responses"
 codex
 ```
 ![Codex结束示意图](./images/codex-final.png)
-只要前面的配置填写正确，Codex CLI 就会通过 **RK-API** 调用模型。
+只要前面的配置填写正确，Codex CLI 就会通过 **NEW-API** 调用模型。
 ---
 ## 🔟 Codex CLI 常见问题排查
 ### ① 鉴权失败 / 401
@@ -243,12 +245,12 @@ codex
 ```toml
 model = "gpt-5.2-codex"
 ```
-* RK-API 当前是否开放该模型
+* NEW-API 当前是否开放该模型
 ---
 ### ③ 连接失败 / 404 / 请求异常
 请检查 `base_url` 是否写成：
 ```toml
-base_url = "https://api.rosekhlifa.cn/v1"
+base_url = "https://newapi.hello4am.com/v1"
 ```
 特别注意这几点：
 * `https` 不要写成 `http`
@@ -281,11 +283,11 @@ codex --version
 4. `preferred_auth_method = "apikey"` 是否存在
 5. 模型名和接口地址是否拼写一致
 ---
-# 🧪 四、使用 cURL 测试 RK-API
+# 🧪 四、使用 cURL 测试 NEW-API
 如果你想先确认接口本身是否可用，可以使用 cURL 直接测试。
 把命令中的 `<你的sk密钥>` 替换成你自己的真实 Key：
 ```bash
-curl https://api.rosekhlifa.cn/v1/chat/completions \
+curl https://newapi.hello4am.com/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <你的sk密钥>" \
   -d '{
@@ -298,22 +300,22 @@ curl https://api.rosekhlifa.cn/v1/chat/completions \
     ]
   }'
 ```
-![cURL 测试 RK-API 示意图](./images/curl-test.png)
+![cURL 测试 NEW-API 示意图](./images/curl-test.png)
 ## ✅ 什么情况算测试成功？
 如果返回了一段 JSON，并且其中包含模型生成的回复内容，就说明：
-* RK-API 地址填写正确
+* NEW-API 地址填写正确
 * API Key 可正常使用
 * 模型已经成功调用
 ---
-# 🐍 五、Python 接入 RK-API
-如果你希望把 RK-API 接入自己的 Python 脚本，可以按 OpenAI SDK 兼容方式调用。
+# 🐍 五、Python 接入 NEW-API
+如果你希望把 NEW-API 接入自己的 Python 脚本，可以按 OpenAI SDK 兼容方式调用。
 示例代码如下：
 ```python
 from openai import OpenAI
 
 client = OpenAI(
-    api_key="sk-你的RK-API密钥",
-    base_url="https://api.rosekhlifa.cn/v1"
+    api_key="sk-你的NEW-API密钥",
+    base_url="https://newapi.hello4am.com/v1"
 )
 
 resp = client.chat.completions.create(
@@ -330,7 +332,7 @@ print(resp.choices[0].message.content)
 ```
 ---
 # 🎯 六、推荐使用方式
-如果你是第一次接触 RK-API，建议按下面顺序来。
+如果你是第一次接触 NEW-API，建议按下面顺序来。
 ## 👤 普通用户
 推荐优先使用 **Cherry Studio**
 原因：
@@ -356,21 +358,21 @@ print(resp.choices[0].message.content)
 ---
 # 📚 八、信息速查
 ```text
-控制台地址：https://ai.rosekhlifa.cn
-API 地址：https://api.rosekhlifa.cn/v1
+控制台地址：https://newapi.hello4am.com
+API 地址：https://newapi.hello4am.com/v1
 推荐模型：gpt-5.2-codex
 Codex 配置目录（Windows）：C:\Users\你的用户名\.codex
 ```
 ---
 # ✅ 九、一句话总结
-如果你只是想快速稳定使用 RK-API：
+如果你只是想快速稳定使用 NEW-API：
 * 🍒 **聊天、问代码、看报错**：推荐用 **Cherry Studio**
 * 💻 **喜欢终端、想走命令行工作流**：推荐用 **Codex CLI**
 * 🛠️ **想自己写程序接入**：推荐用 **Python / cURL**
 ---
 # ❓ 十、FAQ 常见问题
 这里整理了一些用户最常遇到的问题。
-如果你是第一次接触 RK-API，建议先看一遍，能少走很多弯路。
+如果你是第一次接触 NEW-API，建议先看一遍，能少走很多弯路。
 ---
 ## Q1：API Key 是什么？为什么我必须创建它？
 API Key 可以理解为你的“使用凭证”🔑
@@ -418,9 +420,9 @@ API Key 可以理解为你的“使用凭证”🔑
 建议先对照文档重新检查一遍。
 ---
 ## Q5：接口地址一定要写 `/v1` 吗？
-当前 RK-API 文档中的标准接口地址是：
+当前 NEW-API 文档中的标准接口地址是：
 ```text
-https://api.rosekhlifa.cn/v1
+https://newapi.hello4am.com/v1
 ```
 建议按这个完整地址填写，不要自行删改。
 尤其是新手用户，**直接照抄最稳妥**。
@@ -428,7 +430,7 @@ https://api.rosekhlifa.cn/v1
 ## Q6：为什么 Cherry Studio 可以用，但 Codex CLI 不行？
 这通常说明：
 * 你的 API Key 本身没问题
-* RK-API 服务本身也没问题
+* NEW-API 服务本身也没问题
 * 问题大概率出在 Codex CLI 的本地配置上
 重点检查这几个地方：
 * `.codex` 目录是否正确
@@ -436,7 +438,7 @@ https://api.rosekhlifa.cn/v1
 * `config.toml` 是否存在
 * 文件名是否拼写正确
 * `wire_api = "responses"` 是否填写正确
-* `base_url` 是否写成 `https://api.rosekhlifa.cn/v1`
+* `base_url` 是否写成 `https://newapi.hello4am.com/v1`
 ---
 ## Q7：为什么 Codex CLI 配置好了，还是提示找不到模型？
 请检查 `config.toml` 中是否写成：
@@ -456,7 +458,7 @@ model = "gpt-5.2-codex"
 ---
 ## Q9：API Key 泄露了怎么办？
 如果你怀疑自己的 Key 已经泄露，建议立刻处理：
-1. 回到控制台：`https://ai.rosekhlifa.cn`
+1. 回到控制台：`https://newapi.hello4am.com`
 2. 找到对应令牌
 3. 删除旧 Key
 4. 重新创建一个新的 Key
@@ -486,7 +488,7 @@ model = "gpt-5.2-codex"
 请先检查你的 `auth.json` 是否写成这样：
 ```json
 {
-  "OPENAI_API_KEY": "sk-你的RK-API密钥"
+  "OPENAI_API_KEY": "sk-你的NEW-API密钥"
 }
 ```
 然后重新确认 Key 是否是控制台里最新生成的。
@@ -496,7 +498,7 @@ model = "gpt-5.2-codex"
 通常表示接口地址写错了，或者请求的路径不对。
 ### 正确地址
 ```text
-https://api.rosekhlifa.cn/v1
+https://newapi.hello4am.com/v1
 ```
 ### 检查重点
 * 是否把 `https` 写成了 `http`
@@ -519,14 +521,14 @@ gpt-5.2-codex
 ### 先检查这两项
 * Base URL 是否填写为：
 ```text
-https://api.rosekhlifa.cn/v1
+https://newapi.hello4am.com/v1
 ```
 * API Key 是否填写为你的真实 `sk-...`
 ### 另外注意
 有些用户会把接口地址写成主页地址、控制台地址，这是不对的。
 请区分：
-* 控制台地址：`https://ai.rosekhlifa.cn`
-* API 地址：`https://api.rosekhlifa.cn/v1`
+* 控制台地址：`https://newapi.hello4am.com/`
+* API 地址：`https://newapi.hello4am.com/v1`
 ---
 ## 5）Codex CLI 无法连接
 ### 建议按顺序检查
@@ -539,21 +541,21 @@ C:\Users\你的用户名\.codex
 确认文件内容是合法 JSON：
 ```json
 {
-  "OPENAI_API_KEY": "sk-你的RK-API密钥"
+  "OPENAI_API_KEY": "sk-你的NEW-API密钥"
 }
 ```
 #### 第三步：检查 `config.toml`
 确认内容如下：
 ```toml
-model_provider = "rkapi"
+model_provider = "NEWapi"
 personality = "pragmatic"
 model = "gpt-5.2-codex"
 model_reasoning_effort = "medium"
 preferred_auth_method = "apikey"
 
-[model_providers.rkapi]
-name = "RK-API"
-base_url = "https://api.rosekhlifa.cn/v1"
+[model_providers.NEWapi]
+name = "NEW-API"
+base_url = "https://newapi.hello4am.com/v1"
 wire_api = "responses"
 ```
 #### 第四步：检查文件名
@@ -576,20 +578,17 @@ Windows 有时会隐藏扩展名，用户以为是 `.toml`，实际上还是 `.t
 * 再回到 Cherry Studio 或 Codex CLI 里排查
 ---
 # 🆘 十二、遇到问题时如何反馈
-如果你在使用 RK-API 时遇到问题，建议反馈时尽量附上以下信息：
+如果你在使用 NEW-API 时遇到问题，建议反馈时尽量附上以下信息：
 * 你使用的是哪种方式接入（Cherry Studio / Codex CLI / Python / cURL）
-* 你填写的接口地址是否为 `https://api.rosekhlifa.cn/v1`
+* 你填写的接口地址是否为 `https://newapi.hello4am.com/v1`
 * 是否已经创建了 API Key
 * 报错提示的完整内容
 * 相关截图（建议打码处理 API Key）
 > ⚠️ 注意：
 > 反馈截图时，请务必遮挡自己的 API Key，不要直接暴露完整密钥。
-> 反馈方式： QQ🐧-2221542777
->           微信 -R0sEkHL1fA
->           邮箱 -rk@rosekhlifa.cn
 ---
 # 🎉 十三、结语
-希望这篇文档能帮助你顺利完成 RK-API 接入。
+希望这篇文档能帮助你顺利完成 NEW-API 接入。
 如果你是第一次使用，建议优先从 **Cherry Studio** 开始；
 如果你更习惯命令行工作流，再继续配置 **Codex CLI**。
 祝你使用顺利，编码愉快 🚀
