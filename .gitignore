@@ -26,6 +26,7 @@ gcp-prod-deployer
 run-new-api.out.log
 run-new-api.err.log
 .deploy/
+deploy/
 .npm-cache/
 .tools/
 
