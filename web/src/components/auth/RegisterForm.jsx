@@ -74,14 +74,13 @@ const RegisterForm = () => {
     timeout: '请求超时，请刷新页面后重新发起 GitHub 登录',
   };
   const [inputs, setInputs] = useState({
-    username: '',
     password: '',
     password2: '',
     email: '',
     verification_code: '',
     wechat_verification_code: '',
   });
-  const { username, password, password2 } = inputs;
+  const { password, password2 } = inputs;
   const [userState, userDispatch] = useContext(UserContext);
   const [statusState] = useContext(StatusContext);
   const [turnstileEnabled, setTurnstileEnabled] = useState(false);
@@ -215,6 +214,16 @@ const RegisterForm = () => {
     setInputs((inputs) => ({ ...inputs, [name]: value }));
   }
 
+  const buildUsernameFromEmail = (email) => {
+    const localPart = email
+      .split('@')[0]
+      .replace(/[^a-zA-Z0-9_]/g, '')
+      .toLowerCase();
+    const base = localPart || 'qquser';
+    const suffix = Date.now().toString().slice(-6);
+    return `${base.slice(0, 13)}_${suffix}`.slice(0, 20);
+  };
+
   async function handleSubmit(e) {
     if (password.length < 8) {
       showInfo('密码长度不得小于 8 位！');
@@ -224,7 +233,16 @@ const RegisterForm = () => {
       showInfo('两次输入的密码不一致');
       return;
     }
-    if (username && password) {
+    const normalizedEmail = (inputs.email || '').trim().toLowerCase();
+    if (!/^[^@\s]+@qq\.com$/.test(normalizedEmail)) {
+      showInfo('仅支持 qq.com 邮箱注册');
+      return;
+    }
+    if (showEmailVerification && !inputs.verification_code) {
+      showInfo('请输入邮箱验证码');
+      return;
+    }
+    if (password) {
       if (turnstileEnabled && turnstileToken === '') {
         showInfo('请稍后几秒重试，Turnstile 正在检查用户环境！');
         return;
@@ -234,10 +252,15 @@ const RegisterForm = () => {
         if (!affCode) {
           affCode = localStorage.getItem('aff');
         }
-        inputs.aff_code = affCode;
+        const payload = {
+          ...inputs,
+          aff_code: affCode,
+          email: normalizedEmail,
+          username: buildUsernameFromEmail(normalizedEmail),
+        };
         const res = await API.post(
           `/api/user/register?turnstile=${turnstileToken}`,
-          inputs,
+          payload,
         );
         const { success, message } = res.data;
         if (success) {
@@ -255,7 +278,12 @@ const RegisterForm = () => {
   }
 
   const sendVerificationCode = async () => {
-    if (inputs.email === '') return;
+    const normalizedEmail = (inputs.email || '').trim().toLowerCase();
+    if (normalizedEmail === '') return;
+    if (!/^[^@\s]+@qq\.com$/.test(normalizedEmail)) {
+      showInfo('仅支持 qq.com 邮箱注册');
+      return;
+    }
     if (turnstileEnabled && turnstileToken === '') {
       showInfo('请稍后几秒重试，Turnstile 正在检查用户环境！');
       return;
@@ -263,7 +291,7 @@ const RegisterForm = () => {
     setVerificationCodeLoading(true);
     try {
       const res = await API.get(
-        `/api/verification?email=${encodeURIComponent(inputs.email)}&turnstile=${turnstileToken}`,
+        `/api/verification?email=${encodeURIComponent(normalizedEmail)}&turnstile=${turnstileToken}`,
       );
       const { success, message } = res.data;
       if (success) {
@@ -573,14 +601,17 @@ const RegisterForm = () => {
             </div>
             <div className='px-2 py-8'>
               <Form className='space-y-3'>
-                <Form.Input
-                  field='username'
-                  label={t('用户名')}
-                  placeholder={t('请输入用户名')}
-                  name='username'
-                  onChange={(value) => handleChange('username', value)}
-                  prefix={<IconUser />}
-                />
+                {!showEmailVerification && (
+                  <Form.Input
+                    field='email'
+                    label={t('邮箱')}
+                    placeholder='请输入 qq.com 邮箱'
+                    name='email'
+                    type='email'
+                    onChange={(value) => handleChange('email', value)}
+                    prefix={<IconMail />}
+                  />
+                )}
 
                 <Form.Input
                   field='password'

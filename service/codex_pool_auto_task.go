@@ -88,12 +88,12 @@ func loadCodexPoolAutoConfigFromEnv() codexPoolAutoConfig {
 	if registerWorkers <= 0 {
 		registerWorkers = 1
 	}
-	registerMaxPerRound := common.GetEnvOrDefault("CODEX_POOL_REGISTER_MAX_PER_ROUND", 7)
+	registerMaxPerRound := common.GetEnvOrDefault("CODEX_POOL_REGISTER_MAX_PER_ROUND", 10)
 	if registerMaxPerRound <= 0 {
-		registerMaxPerRound = 7
+		registerMaxPerRound = 10
 	}
-	if registerMaxPerRound > 7 {
-		registerMaxPerRound = 7
+	if registerMaxPerRound > 10 {
+		registerMaxPerRound = 10
 	}
 	roundIntervalSec := common.GetEnvOrDefault("CODEX_POOL_REGISTER_ROUND_INTERVAL_SECONDS", 90)
 	if roundIntervalSec < 10 {
@@ -165,8 +165,8 @@ func runCodexPoolAutoUpdateOnce(cfg codexPoolAutoConfig) {
 	if perRound > cfg.RegisterMaxPerRound {
 		perRound = cfg.RegisterMaxPerRound
 	}
-	if perRound > 7 {
-		perRound = 7
+	if perRound > 10 {
+		perRound = 10
 	}
 	if perRound <= 0 {
 		perRound = 1
