@@ -110,6 +110,8 @@ func main() {
 	service.StartCodexCredentialAutoRefreshTask()
 	// Codex pool auto-update from local token json files (optional, controlled by env)
 	service.StartCodexAccountPoolAutoUpdateTask()
+	// Codex pool full health check for multi-key channels
+	service.StartCodexPoolHealthCheckTask()
 
 	// Subscription quota reset task (daily/weekly/monthly/custom)
 	service.StartSubscriptionQuotaResetTask()

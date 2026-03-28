@@ -10,25 +10,24 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 
 	"github.com/bytedance/gopkg/util/gopool"
 )
 
 type codexPoolAutoConfig struct {
-	Enabled              bool
-	ChannelID            int
-	TokenDir             string
-	SyncInterval         time.Duration
-	MinEnabledKeys       int
-	RegisterEnabled      bool
-	RegisterBatch        int
-	RegisterMaxPerRound  int
-	RegisterRoundInterval time.Duration
-	RegisterWorkers      int
-	RegisterTimeout      time.Duration
-	RegisterToolDir      string
-	RegisterPython       string
-	RegisterNoOAuth      bool
+	Enabled         bool
+	ChannelID       int
+	TokenDir        string
+	SyncInterval    time.Duration
+	MinEnabledKeys  int
+	RegisterEnabled bool
+	RegisterBatch   int
+	RegisterWorkers int
+	RegisterTimeout time.Duration
+	RegisterToolDir string
+	RegisterPython  string
+	RegisterNoOAuth bool
 }
 
 var (
@@ -42,36 +41,34 @@ func StartCodexAccountPoolAutoUpdateTask() {
 			return
 		}
 
-		cfg := loadCodexPoolAutoConfigFromEnv()
-		if !cfg.Enabled {
-			return
-		}
-		if cfg.ChannelID <= 0 {
-			logger.LogWarn(context.Background(), "codex pool auto-update disabled: CODEX_POOL_CHANNEL_ID is required")
-			return
-		}
-
 		gopool.Go(func() {
-			logger.LogInfo(context.Background(),
-				fmt.Sprintf(
-					"codex pool auto-update task started: channel_id=%d token_dir=%s interval=%s min_enabled=%d register_enabled=%t",
-					cfg.ChannelID, cfg.TokenDir, cfg.SyncInterval, cfg.MinEnabledKeys, cfg.RegisterEnabled,
-				),
-			)
+			logger.LogInfo(context.Background(), "codex pool auto-update task started")
+			for {
+				cfg := loadCodexPoolAutoConfigFromEnv()
+				if !cfg.Enabled {
+					time.Sleep(time.Minute)
+					continue
+				}
+				if cfg.ChannelID <= 0 {
+					logger.LogWarn(context.Background(), "codex pool auto-update disabled: CODEX_POOL_CHANNEL_ID is required")
+					time.Sleep(time.Minute)
+					continue
+				}
 
-			runCodexPoolAutoUpdateOnce(cfg)
-
-			ticker := time.NewTicker(cfg.SyncInterval)
-			defer ticker.Stop()
-			for range ticker.C {
 				runCodexPoolAutoUpdateOnce(cfg)
+				time.Sleep(cfg.SyncInterval)
 			}
 		})
 	})
 }
 
 func loadCodexPoolAutoConfigFromEnv() codexPoolAutoConfig {
+	poolSetting := operation_setting.GetCodexPoolSetting()
+
 	intervalSec := common.GetEnvOrDefault("CODEX_POOL_SYNC_INTERVAL_SECONDS", 300)
+	if poolSetting.AutoRegisterMinutes > 0 {
+		intervalSec = poolSetting.AutoRegisterMinutes * 60
+	}
 	if intervalSec < 30 {
 		intervalSec = 30
 	}
@@ -88,33 +85,38 @@ func loadCodexPoolAutoConfigFromEnv() codexPoolAutoConfig {
 	if registerWorkers <= 0 {
 		registerWorkers = 1
 	}
-	registerMaxPerRound := common.GetEnvOrDefault("CODEX_POOL_REGISTER_MAX_PER_ROUND", 10)
-	if registerMaxPerRound <= 0 {
-		registerMaxPerRound = 10
+	if poolSetting.RegisterCountPerInterval > 0 {
+		registerBatch = poolSetting.RegisterCountPerInterval
 	}
-	if registerMaxPerRound > 10 {
-		registerMaxPerRound = 10
+
+	minEnabledKeys := common.GetEnvOrDefault("CODEX_POOL_MIN_ENABLED_KEYS", 0)
+	if poolSetting.MinEnabledKeys > 0 {
+		minEnabledKeys = poolSetting.MinEnabledKeys
 	}
-	roundIntervalSec := common.GetEnvOrDefault("CODEX_POOL_REGISTER_ROUND_INTERVAL_SECONDS", 90)
-	if roundIntervalSec < 10 {
-		roundIntervalSec = 10
+
+	registerEnabled := common.GetEnvOrDefaultBool("CODEX_POOL_REGISTER_ENABLED", false)
+	if poolSetting.AutoRegisterEnabled {
+		registerEnabled = true
+	}
+
+	enabled := common.GetEnvOrDefaultBool("CODEX_POOL_AUTO_SYNC_ENABLED", false)
+	if poolSetting.AutoRegisterEnabled {
+		enabled = true
 	}
 
 	return codexPoolAutoConfig{
-		Enabled:               common.GetEnvOrDefaultBool("CODEX_POOL_AUTO_SYNC_ENABLED", false),
-		ChannelID:             common.GetEnvOrDefault("CODEX_POOL_CHANNEL_ID", 0),
-		TokenDir:              strings.TrimSpace(DefaultCodexPoolTokenDir()),
-		SyncInterval:          time.Duration(intervalSec) * time.Second,
-		MinEnabledKeys:        common.GetEnvOrDefault("CODEX_POOL_MIN_ENABLED_KEYS", 0),
-		RegisterEnabled:       common.GetEnvOrDefaultBool("CODEX_POOL_REGISTER_ENABLED", false),
-		RegisterBatch:         registerBatch,
-		RegisterMaxPerRound:   registerMaxPerRound,
-		RegisterRoundInterval: time.Duration(roundIntervalSec) * time.Second,
-		RegisterWorkers:       registerWorkers,
-		RegisterTimeout:       time.Duration(registerTimeoutSec) * time.Second,
-		RegisterToolDir:       strings.TrimSpace(DefaultCodexRegisterToolDir()),
-		RegisterPython:        strings.TrimSpace(DefaultCodexRegisterPythonBin()),
-		RegisterNoOAuth:       common.GetEnvOrDefaultBool("CODEX_POOL_REGISTER_NO_OAUTH", false),
+		Enabled:         enabled,
+		ChannelID:       common.GetEnvOrDefault("CODEX_POOL_CHANNEL_ID", 0),
+		TokenDir:        strings.TrimSpace(DefaultCodexPoolTokenDir()),
+		SyncInterval:    time.Duration(intervalSec) * time.Second,
+		MinEnabledKeys:  minEnabledKeys,
+		RegisterEnabled: registerEnabled,
+		RegisterBatch:   registerBatch,
+		RegisterWorkers: registerWorkers,
+		RegisterTimeout: time.Duration(registerTimeoutSec) * time.Second,
+		RegisterToolDir: strings.TrimSpace(DefaultCodexRegisterToolDir()),
+		RegisterPython:  strings.TrimSpace(DefaultCodexRegisterPythonBin()),
+		RegisterNoOAuth: common.GetEnvOrDefaultBool("CODEX_POOL_REGISTER_NO_OAUTH", false),
 	}
 }
 
@@ -158,113 +160,73 @@ func runCodexPoolAutoUpdateOnce(cfg codexPoolAutoConfig) {
 	if need < cfg.RegisterBatch {
 		need = cfg.RegisterBatch
 	}
-	perRound := cfg.RegisterBatch
-	if perRound <= 0 {
-		perRound = 1
+	roundCount := need
+	if roundCount > cfg.RegisterBatch {
+		roundCount = cfg.RegisterBatch
 	}
-	if perRound > cfg.RegisterMaxPerRound {
-		perRound = cfg.RegisterMaxPerRound
+	if roundCount <= 0 {
+		roundCount = 1
 	}
-	if perRound > 10 {
-		perRound = 10
-	}
-	if perRound <= 0 {
-		perRound = 1
+	if roundCount > 10 {
+		roundCount = 10
 	}
 
-	deadline := time.Now().Add(cfg.RegisterTimeout)
-	remaining := need
-	enabledNow := syncRes.EnabledKeys
-
-	for remaining > 0 {
-		left := time.Until(deadline)
-		if left <= 0 {
-			logger.LogWarn(ctx, "codex pool auto-update: register timeout reached before target size")
-			break
-		}
-
-		roundCount := remaining
-		if roundCount > perRound {
-			roundCount = perRound
-		}
-		roundWorkers := cfg.RegisterWorkers
-		if roundWorkers <= 0 {
-			roundWorkers = 1
-		}
-		if roundWorkers > roundCount {
-			roundWorkers = roundCount
-		}
-
-		registerCtx, cancel := context.WithTimeout(ctx, left)
-		output, runErr := RunCodexRegisterTool(registerCtx, CodexRegisterRunOptions{
-			ToolDir: cfg.RegisterToolDir,
-			Python:  cfg.RegisterPython,
-			Count:   roundCount,
-			Workers: roundWorkers,
-			NoOAuth: cfg.RegisterNoOAuth,
-		})
-		cancel()
-
-		outputTail := tailString(output, 2000)
-		if outputTail != "" {
-			logger.LogInfo(ctx, fmt.Sprintf("codex pool auto-update: register output (tail):\n%s", outputTail))
-		}
-		if runErr != nil {
-			logger.LogWarn(ctx, fmt.Sprintf("codex pool auto-update: register tool failed: %v", runErr))
-			return
-		}
-
-		afterRes, err := SyncCodexChannelFromTokenDir(cfg.ChannelID, cfg.TokenDir)
-		if err != nil {
-			logger.LogWarn(ctx, fmt.Sprintf("codex pool auto-update: sync after register failed: %v", err))
-			return
-		}
-
-		if afterRes.EnabledKeys >= cfg.MinEnabledKeys {
-			logger.LogInfo(
-				ctx,
-				fmt.Sprintf(
-					"codex pool auto-update: replenished channel_id=%d enabled=%d/%d total_keys=%d updated=%t",
-					afterRes.ChannelID,
-					afterRes.EnabledKeys,
-					cfg.MinEnabledKeys,
-					afterRes.TotalKeys,
-					afterRes.Updated,
-				),
-			)
-			return
-		}
-
-		if afterRes.EnabledKeys <= enabledNow {
-			logger.LogWarn(
-				ctx,
-				fmt.Sprintf(
-					"codex pool auto-update: register made no progress (enabled=%d target=%d), stop this cycle",
-					afterRes.EnabledKeys,
-					cfg.MinEnabledKeys,
-				),
-			)
-			return
-		}
-
-		enabledNow = afterRes.EnabledKeys
-		remaining = cfg.MinEnabledKeys - enabledNow
-
-		if remaining > 0 && cfg.RegisterRoundInterval > 0 {
-			time.Sleep(cfg.RegisterRoundInterval)
-		}
+	roundWorkers := cfg.RegisterWorkers
+	if roundWorkers <= 0 {
+		roundWorkers = 1
+	}
+	if roundWorkers > roundCount {
+		roundWorkers = roundCount
 	}
 
-	if enabledNow < cfg.MinEnabledKeys {
-		logger.LogWarn(
+	registerCtx, cancel := context.WithTimeout(ctx, cfg.RegisterTimeout)
+	output, runErr := RunCodexRegisterTool(registerCtx, CodexRegisterRunOptions{
+		ToolDir: cfg.RegisterToolDir,
+		Python:  cfg.RegisterPython,
+		Count:   roundCount,
+		Workers: roundWorkers,
+		NoOAuth: cfg.RegisterNoOAuth,
+	})
+	cancel()
+
+	outputTail := tailString(output, 2000)
+	if outputTail != "" {
+		logger.LogInfo(ctx, fmt.Sprintf("codex pool auto-update: register output (tail):\n%s", outputTail))
+	}
+	if runErr != nil {
+		logger.LogWarn(ctx, fmt.Sprintf("codex pool auto-update: register tool failed: %v", runErr))
+		return
+	}
+
+	afterRes, err := SyncCodexChannelFromTokenDir(cfg.ChannelID, cfg.TokenDir)
+	if err != nil {
+		logger.LogWarn(ctx, fmt.Sprintf("codex pool auto-update: sync after register failed: %v", err))
+		return
+	}
+
+	if afterRes.EnabledKeys >= cfg.MinEnabledKeys {
+		logger.LogInfo(
 			ctx,
 			fmt.Sprintf(
-				"codex pool auto-update: target not reached in this cycle, enabled=%d target=%d",
-				enabledNow,
+				"codex pool auto-update: replenished channel_id=%d enabled=%d/%d total_keys=%d updated=%t",
+				afterRes.ChannelID,
+				afterRes.EnabledKeys,
 				cfg.MinEnabledKeys,
+				afterRes.TotalKeys,
+				afterRes.Updated,
 			),
 		)
+		return
 	}
+
+	logger.LogWarn(
+		ctx,
+		fmt.Sprintf(
+			"codex pool auto-update: target not reached in this cycle, enabled=%d target=%d",
+			afterRes.EnabledKeys,
+			cfg.MinEnabledKeys,
+		),
+	)
 }
 
 func tailString(text string, maxRunes int) string {

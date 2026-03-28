@@ -44,6 +44,13 @@ export default function SettingsMonitoring(props) {
       '100-199,300-399,401-407,409-499,500-503,505-523,525-599',
     'monitor_setting.auto_test_channel_enabled': false,
     'monitor_setting.auto_test_channel_minutes': 10,
+    'codex_pool_setting.auto_health_check_enabled': false,
+    'codex_pool_setting.auto_health_check_minutes': 10,
+    'codex_pool_setting.delete_invalid_token_files': false,
+    'codex_pool_setting.auto_register_enabled': false,
+    'codex_pool_setting.min_enabled_keys': 70,
+    'codex_pool_setting.auto_register_minutes': 5,
+    'codex_pool_setting.register_count_per_interval': 1,
   });
   const refForm = useRef();
   const [inputsRow, setInputsRow] = useState(inputs);
@@ -230,6 +237,126 @@ export default function SettingsMonitoring(props) {
                     setInputs({
                       ...inputs,
                       AutomaticEnableChannelEnabled: value,
+                    })
+                  }
+                />
+              </Col>
+            </Row>
+            <Row gutter={16}>
+              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                <Form.Switch
+                  field={'codex_pool_setting.auto_health_check_enabled'}
+                  label={t('Codex 号池全量巡检')}
+                  size='default'
+                  checkedText='是'
+                  uncheckedText='否'
+                  onChange={(value) =>
+                    setInputs({
+                      ...inputs,
+                      'codex_pool_setting.auto_health_check_enabled': value,
+                    })
+                  }
+                />
+              </Col>
+              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                <Form.InputNumber
+                  label={t('Codex 巡检间隔')}
+                  step={1}
+                  min={1}
+                  suffix={t('分钟')}
+                  extraText={t('按间隔对号池全部账号逐个探测')}
+                  placeholder={''}
+                  field={'codex_pool_setting.auto_health_check_minutes'}
+                  onChange={(value) =>
+                    setInputs({
+                      ...inputs,
+                      'codex_pool_setting.auto_health_check_minutes':
+                        parseInt(value),
+                    })
+                  }
+                />
+              </Col>
+              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                <Form.Switch
+                  field={'codex_pool_setting.delete_invalid_token_files'}
+                  label={t('删除失效 token 文件')}
+                  size='default'
+                  checkedText='是'
+                  uncheckedText='否'
+                  onChange={(value) =>
+                    setInputs({
+                      ...inputs,
+                      'codex_pool_setting.delete_invalid_token_files': value,
+                    })
+                  }
+                />
+              </Col>
+            </Row>
+            <Row gutter={16}>
+              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                <Form.Switch
+                  field={'codex_pool_setting.auto_register_enabled'}
+                  label={t('Codex 号池自动补号')}
+                  size='default'
+                  checkedText='是'
+                  uncheckedText='否'
+                  onChange={(value) =>
+                    setInputs({
+                      ...inputs,
+                      'codex_pool_setting.auto_register_enabled': value,
+                    })
+                  }
+                />
+              </Col>
+              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                <Form.InputNumber
+                  label={t('可用号池低于')}
+                  step={1}
+                  min={1}
+                  extraText={t('当可用账号数低于该值时触发补号')}
+                  placeholder={''}
+                  field={'codex_pool_setting.min_enabled_keys'}
+                  onChange={(value) =>
+                    setInputs({
+                      ...inputs,
+                      'codex_pool_setting.min_enabled_keys': parseInt(value),
+                    })
+                  }
+                />
+              </Col>
+              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                <Form.InputNumber
+                  label={t('补号检查间隔')}
+                  step={1}
+                  min={1}
+                  suffix={t('分钟')}
+                  extraText={t('低于阈值时，每隔多少分钟补一次')}
+                  placeholder={''}
+                  field={'codex_pool_setting.auto_register_minutes'}
+                  onChange={(value) =>
+                    setInputs({
+                      ...inputs,
+                      'codex_pool_setting.auto_register_minutes':
+                        parseInt(value),
+                    })
+                  }
+                />
+              </Col>
+            </Row>
+            <Row gutter={16}>
+              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                <Form.InputNumber
+                  label={t('每次注册数量')}
+                  step={1}
+                  min={1}
+                  extraText={t('每个补号周期最多注册多少个账号')}
+                  placeholder={''}
+                  field={'codex_pool_setting.register_count_per_interval'}
+                  onChange={(value) =>
+                    setInputs({
+                      ...inputs,
+                      'codex_pool_setting.register_count_per_interval':
+                        parseInt(value),
                     })
                   }
                 />

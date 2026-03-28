@@ -587,6 +587,17 @@ func handlerMultiKeyUpdate(channel *Channel, usingKey string, status int, reason
 		}
 		if status == common.ChannelStatusEnabled {
 			delete(channel.ChannelInfo.MultiKeyStatusList, keyIndex)
+			if channel.ChannelInfo.MultiKeyDisabledReason != nil {
+				delete(channel.ChannelInfo.MultiKeyDisabledReason, keyIndex)
+			}
+			if channel.ChannelInfo.MultiKeyDisabledTime != nil {
+				delete(channel.ChannelInfo.MultiKeyDisabledTime, keyIndex)
+			}
+			channel.Status = common.ChannelStatusEnabled
+			info := channel.GetOtherInfo()
+			delete(info, "status_reason")
+			delete(info, "status_time")
+			channel.SetOtherInfo(info)
 		} else {
 			channel.ChannelInfo.MultiKeyStatusList[keyIndex] = status
 			if channel.ChannelInfo.MultiKeyDisabledReason == nil {
@@ -648,7 +659,7 @@ func UpdateChannelStatus(channelId int, usingKey string, status int, reason stri
 	if err != nil {
 		return false
 	} else {
-		if channel.Status == status {
+		if !channel.ChannelInfo.IsMultiKey && channel.Status == status {
 			return false
 		}
 
