@@ -77,6 +77,8 @@ func ShouldDisableChannel(channelType int, err *types.NewAPIError) bool {
 		return true
 	case "billing_not_active":
 		return true
+	case "token_invalidated":
+		return true
 	case "pre_consume_token_quota_failed":
 		return true
 	case "Arrearage":

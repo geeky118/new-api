@@ -89,3 +89,68 @@ func TestCollectCodexPoolKeysFromTokenDir(t *testing.T) {
 	}
 }
 
+func TestRemapCodexPoolKeyStatusByAccountID(t *testing.T) {
+	oldKey, err := common.Marshal(CodexOAuthKey{
+		Type:         "codex",
+		Email:        "a@example.com",
+		AccountID:    "acc-a",
+		AccessToken:  "at-old",
+		RefreshToken: "rt-old",
+		LastRefresh:  "2026-03-26T12:00:00+08:00",
+	})
+	if err != nil {
+		t.Fatalf("marshal old key failed: %v", err)
+	}
+	newKey, err := common.Marshal(CodexOAuthKey{
+		Type:         "codex",
+		Email:        "a@example.com",
+		AccountID:    "acc-a",
+		AccessToken:  "at-new",
+		RefreshToken: "rt-new",
+		LastRefresh:  "2026-03-26T13:00:00+08:00",
+	})
+	if err != nil {
+		t.Fatalf("marshal new key failed: %v", err)
+	}
+
+	status, disabledTime, disabledReason := remapCodexPoolKeyStatus(
+		[]string{string(oldKey)},
+		map[int]int{0: common.ChannelStatusAutoDisabled},
+		map[int]int64{0: 123456},
+		map[int]string{0: "status_code=401, token_invalidated"},
+		[]string{string(newKey)},
+	)
+
+	if got := status[0]; got != common.ChannelStatusAutoDisabled {
+		t.Fatalf("expected remapped status %d, got %d", common.ChannelStatusAutoDisabled, got)
+	}
+	if got := disabledTime[0]; got != 123456 {
+		t.Fatalf("expected remapped disabled time 123456, got %d", got)
+	}
+	if got := disabledReason[0]; got != "status_code=401, token_invalidated" {
+		t.Fatalf("expected remapped disabled reason, got %q", got)
+	}
+}
+
+func TestRemapCodexPoolKeyStatusByRefreshTokenFallback(t *testing.T) {
+	oldKey := `{"type":"codex","access_token":"at-old","refresh_token":"rt-a"}`
+	newKey := `{"type":"codex","access_token":"at-new","refresh_token":"rt-a"}`
+
+	status, disabledTime, disabledReason := remapCodexPoolKeyStatus(
+		[]string{oldKey},
+		map[int]int{0: common.ChannelStatusAutoDisabled},
+		map[int]int64{0: 654321},
+		map[int]string{0: "manual disable"},
+		[]string{newKey},
+	)
+
+	if got := status[0]; got != common.ChannelStatusAutoDisabled {
+		t.Fatalf("expected remapped status %d, got %d", common.ChannelStatusAutoDisabled, got)
+	}
+	if got := disabledTime[0]; got != 654321 {
+		t.Fatalf("expected remapped disabled time 654321, got %d", got)
+	}
+	if got := disabledReason[0]; got != "manual disable" {
+		t.Fatalf("expected remapped disabled reason, got %q", got)
+	}
+}

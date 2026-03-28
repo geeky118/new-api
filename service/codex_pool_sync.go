@@ -42,6 +42,12 @@ type codexPoolTokenCandidate struct {
 	FileModTime    time.Time
 }
 
+type codexPoolDisabledState struct {
+	Status int
+	Time   int64
+	Reason string
+}
+
 func DefaultCodexPoolTokenDir() string {
 	return common.GetEnvOrDefaultString("CODEX_POOL_TOKEN_DIR", "chatgpt_register_v2_by_AI/tokens")
 }
@@ -307,15 +313,9 @@ func remapCodexPoolKeyStatus(
 	oldDisabledReason map[int]string,
 	newKeys []string,
 ) (map[int]int, map[int]int64, map[int]string) {
-	oldStatusByKey := make(map[string]int)
-	oldTimeByKey := make(map[string]int64)
-	oldReasonByKey := make(map[string]string)
+	oldStateByIdentity := make(map[string]codexPoolDisabledState)
 
 	for idx, rawKey := range oldKeys {
-		key := strings.TrimSpace(rawKey)
-		if key == "" {
-			continue
-		}
 		status := common.ChannelStatusEnabled
 		if oldStatus != nil {
 			if s, ok := oldStatus[idx]; ok {
@@ -325,15 +325,25 @@ func remapCodexPoolKeyStatus(
 		if status == common.ChannelStatusEnabled {
 			continue
 		}
-		oldStatusByKey[key] = status
+
+		state := codexPoolDisabledState{Status: status}
 		if oldDisabledTime != nil {
 			if v, ok := oldDisabledTime[idx]; ok {
-				oldTimeByKey[key] = v
+				state.Time = v
 			}
 		}
 		if oldDisabledReason != nil {
 			if v, ok := oldDisabledReason[idx]; ok {
-				oldReasonByKey[key] = v
+				state.Reason = v
+			}
+		}
+
+		for _, identity := range buildCodexPoolStatusIdentities(rawKey) {
+			if identity == "" {
+				continue
+			}
+			if _, exists := oldStateByIdentity[identity]; !exists {
+				oldStateByIdentity[identity] = state
 			}
 		}
 	}
@@ -342,24 +352,59 @@ func remapCodexPoolKeyStatus(
 	newTime := make(map[int]int64)
 	newReason := make(map[int]string)
 	for idx, rawKey := range newKeys {
-		key := strings.TrimSpace(rawKey)
-		if key == "" {
+		state, ok := matchCodexPoolDisabledState(oldStateByIdentity, rawKey)
+		if !ok || state.Status == common.ChannelStatusEnabled {
 			continue
 		}
-		status, ok := oldStatusByKey[key]
-		if !ok || status == common.ChannelStatusEnabled {
-			continue
+		newStatus[idx] = state.Status
+		if state.Time > 0 {
+			newTime[idx] = state.Time
 		}
-		newStatus[idx] = status
-		if v, exists := oldTimeByKey[key]; exists {
-			newTime[idx] = v
-		}
-		if v, exists := oldReasonByKey[key]; exists {
-			newReason[idx] = v
+		if state.Reason != "" {
+			newReason[idx] = state.Reason
 		}
 	}
 
 	return newStatus, newTime, newReason
+}
+
+func buildCodexPoolStatusIdentities(rawKey string) []string {
+	trimmed := strings.TrimSpace(rawKey)
+	if trimmed == "" {
+		return nil
+	}
+
+	identities := make([]string, 0, 5)
+	addIdentity := func(identity string) {
+		identity = strings.TrimSpace(identity)
+		if identity == "" {
+			return
+		}
+		for _, existing := range identities {
+			if existing == identity {
+				return
+			}
+		}
+		identities = append(identities, identity)
+	}
+
+	if oauthKey, err := parseCodexOAuthKey(trimmed); err == nil && oauthKey != nil {
+		addIdentity("account:" + strings.TrimSpace(oauthKey.AccountID))
+		addIdentity("refresh:" + strings.TrimSpace(oauthKey.RefreshToken))
+		addIdentity("email:" + strings.TrimSpace(strings.ToLower(oauthKey.Email)))
+		addIdentity("access:" + strings.TrimSpace(oauthKey.AccessToken))
+	}
+	addIdentity("raw:" + trimmed)
+	return identities
+}
+
+func matchCodexPoolDisabledState(states map[string]codexPoolDisabledState, rawKey string) (codexPoolDisabledState, bool) {
+	for _, identity := range buildCodexPoolStatusIdentities(rawKey) {
+		if state, ok := states[identity]; ok {
+			return state, true
+		}
+	}
+	return codexPoolDisabledState{}, false
 }
 
 func shouldUpdateCodexPoolChannel(
