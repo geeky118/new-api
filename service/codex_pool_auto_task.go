@@ -85,6 +85,9 @@ func loadCodexPoolAutoConfigFromEnv() codexPoolAutoConfig {
 	if registerWorkers <= 0 {
 		registerWorkers = 1
 	}
+	if poolSetting.RegisterWorkers > 0 {
+		registerWorkers = poolSetting.RegisterWorkers
+	}
 	if poolSetting.RegisterCountPerInterval > 0 {
 		registerBatch = poolSetting.RegisterCountPerInterval
 	}

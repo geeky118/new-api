@@ -51,6 +51,7 @@ export default function SettingsMonitoring(props) {
     'codex_pool_setting.min_enabled_keys': 70,
     'codex_pool_setting.auto_register_minutes': 5,
     'codex_pool_setting.register_count_per_interval': 1,
+    'codex_pool_setting.register_workers': 1,
   });
   const refForm = useRef();
   const [inputsRow, setInputsRow] = useState(inputs);
@@ -357,6 +358,22 @@ export default function SettingsMonitoring(props) {
                       ...inputs,
                       'codex_pool_setting.register_count_per_interval':
                         parseInt(value),
+                    })
+                  }
+                />
+              </Col>
+              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                <Form.InputNumber
+                  label={t('注册线程数')}
+                  step={1}
+                  min={1}
+                  extraText={t('传给注册脚本的 -w 参数')}
+                  placeholder={''}
+                  field={'codex_pool_setting.register_workers'}
+                  onChange={(value) =>
+                    setInputs({
+                      ...inputs,
+                      'codex_pool_setting.register_workers': parseInt(value),
                     })
                   }
                 />

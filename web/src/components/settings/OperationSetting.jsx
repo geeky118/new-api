@@ -82,6 +82,7 @@ const OperationSetting = () => {
     'codex_pool_setting.min_enabled_keys': 70,
     'codex_pool_setting.auto_register_minutes': 5,
     'codex_pool_setting.register_count_per_interval': 1,
+    'codex_pool_setting.register_workers': 1,
     'checkin_setting.enabled': false,
     'checkin_setting.min_quota': 1000,
     'checkin_setting.max_quota': 10000,

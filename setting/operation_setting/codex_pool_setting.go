@@ -10,6 +10,7 @@ type CodexPoolSetting struct {
 	MinEnabledKeys               int  `json:"min_enabled_keys"`
 	AutoRegisterMinutes          int  `json:"auto_register_minutes"`
 	RegisterCountPerInterval     int  `json:"register_count_per_interval"`
+	RegisterWorkers              int  `json:"register_workers"`
 }
 
 var codexPoolSetting = CodexPoolSetting{
@@ -20,6 +21,7 @@ var codexPoolSetting = CodexPoolSetting{
 	MinEnabledKeys:           70,
 	AutoRegisterMinutes:      5,
 	RegisterCountPerInterval: 1,
+	RegisterWorkers:          1,
 }
 
 func init() {
