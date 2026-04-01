@@ -19,17 +19,17 @@ func formatNotifyType(channelId int, status int) string {
 }
 
 func DisableChannel(channelError types.ChannelError, reason string) bool {
-	common.SysLog(fmt.Sprintf("通道「%s」（#%d）发生错误，准备禁用，原因：%s", channelError.ChannelName, channelError.ChannelId, reason))
+	common.SysLog(fmt.Sprintf("channel %s (#%d) will be disabled, reason: %s", channelError.ChannelName, channelError.ChannelId, reason))
 
 	if !channelError.AutoBan {
-		common.SysLog(fmt.Sprintf("通道「%s」（#%d）未启用自动禁用功能，跳过禁用操作", channelError.ChannelName, channelError.ChannelId))
+		common.SysLog(fmt.Sprintf("channel %s (#%d) auto-ban is disabled, skip disabling", channelError.ChannelName, channelError.ChannelId))
 		return false
 	}
 
 	success := model.UpdateChannelStatus(channelError.ChannelId, channelError.UsingKey, common.ChannelStatusAutoDisabled, reason)
 	if success {
-		subject := fmt.Sprintf("通道「%s」（#%d）已被禁用", channelError.ChannelName, channelError.ChannelId)
-		content := fmt.Sprintf("通道「%s」（#%d）已被禁用，原因：%s", channelError.ChannelName, channelError.ChannelId, reason)
+		subject := fmt.Sprintf("Channel %s (#%d) disabled", channelError.ChannelName, channelError.ChannelId)
+		content := fmt.Sprintf("Channel %s (#%d) disabled, reason: %s", channelError.ChannelName, channelError.ChannelId, reason)
 		NotifyRootUser(formatNotifyType(channelError.ChannelId, common.ChannelStatusAutoDisabled), subject, content)
 	}
 	return success
@@ -40,19 +40,19 @@ func RemoveChannelKeyFromPool(channelError types.ChannelError, reason string) bo
 		return false
 	}
 
-	common.SysLog(fmt.Sprintf("通道「%s」（#%d）命中 usage limit，准备将当前 key 从号池剔除，原因：%s", channelError.ChannelName, channelError.ChannelId, reason))
+	common.SysLog(fmt.Sprintf("channel %s (#%d) will remove current key from pool, reason: %s", channelError.ChannelName, channelError.ChannelId, reason))
 
 	success := model.RemoveChannelKey(channelError.ChannelId, channelError.UsingKey, reason)
 	if success {
-		subject := fmt.Sprintf("通道「%s」（#%d）账号已从号池剔除", channelError.ChannelName, channelError.ChannelId)
-		content := fmt.Sprintf("通道「%s」（#%d）账号已从号池剔除，原因：%s", channelError.ChannelName, channelError.ChannelId, reason)
+		subject := fmt.Sprintf("Channel %s (#%d) key removed from pool", channelError.ChannelName, channelError.ChannelId)
+		content := fmt.Sprintf("Channel %s (#%d) key removed from pool, reason: %s", channelError.ChannelName, channelError.ChannelId, reason)
 		NotifyRootUser(formatNotifyType(channelError.ChannelId, common.ChannelStatusAutoDisabled), subject, content)
 		if channelError.ChannelType == constant.ChannelTypeCodex {
 			deleted, err := DeleteCodexPoolTokenFilesByKey(DefaultCodexPoolTokenDir(), channelError.UsingKey)
 			if err != nil {
-				common.SysLog(fmt.Sprintf("通道「%s」（#%d）剔除账号后删除 tokens 文件失败: %v", channelError.ChannelName, channelError.ChannelId, err))
+				common.SysLog(fmt.Sprintf("channel %s (#%d) failed to delete token files after key removal: %v", channelError.ChannelName, channelError.ChannelId, err))
 			} else if deleted > 0 {
-				common.SysLog(fmt.Sprintf("通道「%s」（#%d）剔除账号后已删除 %d 个 tokens 文件", channelError.ChannelName, channelError.ChannelId, deleted))
+				common.SysLog(fmt.Sprintf("channel %s (#%d) deleted %d token files after key removal", channelError.ChannelName, channelError.ChannelId, deleted))
 			}
 		}
 	}
@@ -62,8 +62,8 @@ func RemoveChannelKeyFromPool(channelError types.ChannelError, reason string) bo
 func EnableChannel(channelId int, usingKey string, channelName string) {
 	success := model.UpdateChannelStatus(channelId, usingKey, common.ChannelStatusEnabled, "")
 	if success {
-		subject := fmt.Sprintf("通道「%s」（#%d）已被启用", channelName, channelId)
-		content := fmt.Sprintf("通道「%s」（#%d）已被启用", channelName, channelId)
+		subject := fmt.Sprintf("Channel %s (#%d) enabled", channelName, channelId)
+		content := fmt.Sprintf("Channel %s (#%d) enabled", channelName, channelId)
 		NotifyRootUser(formatNotifyType(channelId, common.ChannelStatusEnabled), subject, content)
 	}
 }
@@ -196,8 +196,8 @@ func RemoveChannelKeyPermanentlyFromPoolWithTokenDir(channelError types.ChannelE
 		}
 	}
 
-	subject := fmt.Sprintf("閫氶亾銆?s銆嶏紙#%d锛夎处鍙峰凡浠庡彿姹犲墧闄?, channelError.ChannelName, channelError.ChannelId)
-	content := fmt.Sprintf("閫氶亾銆?s銆嶏紙#%d锛夎处鍙峰凡浠庡彿姹犲墧闄わ紝鍘熷洜锛?s", channelError.ChannelName, channelError.ChannelId, reason)
+	subject := fmt.Sprintf("Channel %s (#%d) key removed from pool", channelError.ChannelName, channelError.ChannelId)
+	content := fmt.Sprintf("Channel %s (#%d) key removed from pool, reason: %s", channelError.ChannelName, channelError.ChannelId, reason)
 	NotifyRootUser(formatNotifyType(channelError.ChannelId, common.ChannelStatusAutoDisabled), subject, content)
 
 	deleted := 0
