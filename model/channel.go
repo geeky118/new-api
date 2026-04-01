@@ -619,6 +619,104 @@ func handlerMultiKeyUpdate(channel *Channel, usingKey string, status int, reason
 	}
 }
 
+func rebuildMultiKeyString(original string, keys []string) string {
+	trimmed := strings.TrimSpace(original)
+	if strings.HasPrefix(trimmed, "[") {
+		rawKeys := make([]json.RawMessage, 0, len(keys))
+		for _, key := range keys {
+			rawKeys = append(rawKeys, json.RawMessage(key))
+		}
+		if data, err := common.Marshal(rawKeys); err == nil {
+			return string(data)
+		}
+	}
+	return strings.Join(keys, "\n")
+}
+
+func remapMultiKeyStatusMap[T any](source map[int]T, removedIdx int) map[int]T {
+	if len(source) == 0 {
+		return nil
+	}
+	result := make(map[int]T)
+	for idx, value := range source {
+		if idx == removedIdx {
+			continue
+		}
+		if idx > removedIdx {
+			result[idx-1] = value
+			continue
+		}
+		result[idx] = value
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
+}
+
+func handlerMultiKeyRemove(channel *Channel, usingKey string) bool {
+	if channel == nil || !channel.ChannelInfo.IsMultiKey {
+		return false
+	}
+
+	keys := channel.GetKeys()
+	if len(keys) == 0 {
+		return false
+	}
+
+	removeIdx := -1
+	for i, key := range keys {
+		if key == usingKey {
+			removeIdx = i
+			break
+		}
+	}
+	if removeIdx < 0 {
+		return false
+	}
+
+	remainingKeys := append(append([]string{}, keys[:removeIdx]...), keys[removeIdx+1:]...)
+	channel.Key = rebuildMultiKeyString(channel.Key, remainingKeys)
+	channel.Keys = remainingKeys
+	channel.ChannelInfo.MultiKeySize = len(remainingKeys)
+	channel.ChannelInfo.MultiKeyStatusList = remapMultiKeyStatusMap(channel.ChannelInfo.MultiKeyStatusList, removeIdx)
+	channel.ChannelInfo.MultiKeyDisabledReason = remapMultiKeyStatusMap(channel.ChannelInfo.MultiKeyDisabledReason, removeIdx)
+	channel.ChannelInfo.MultiKeyDisabledTime = remapMultiKeyStatusMap(channel.ChannelInfo.MultiKeyDisabledTime, removeIdx)
+
+	if len(remainingKeys) == 0 {
+		channel.Status = common.ChannelStatusAutoDisabled
+		info := channel.GetOtherInfo()
+		info["status_reason"] = "All keys are removed"
+		info["status_time"] = common.GetTimestamp()
+		channel.SetOtherInfo(info)
+		channel.ChannelInfo.MultiKeyPollingIndex = 0
+		return true
+	}
+
+	if channel.ChannelInfo.MultiKeyPollingIndex > removeIdx {
+		channel.ChannelInfo.MultiKeyPollingIndex--
+	}
+	if channel.ChannelInfo.MultiKeyPollingIndex < 0 || channel.ChannelInfo.MultiKeyPollingIndex >= len(remainingKeys) {
+		channel.ChannelInfo.MultiKeyPollingIndex = 0
+	}
+
+	if len(channel.ChannelInfo.MultiKeyStatusList) >= channel.ChannelInfo.MultiKeySize {
+		channel.Status = common.ChannelStatusAutoDisabled
+		info := channel.GetOtherInfo()
+		info["status_reason"] = "All keys are disabled"
+		info["status_time"] = common.GetTimestamp()
+		channel.SetOtherInfo(info)
+		return true
+	}
+
+	channel.Status = common.ChannelStatusEnabled
+	info := channel.GetOtherInfo()
+	delete(info, "status_reason")
+	delete(info, "status_time")
+	channel.SetOtherInfo(info)
+	return true
+}
+
 func UpdateChannelStatus(channelId int, usingKey string, status int, reason string) bool {
 	if common.MemoryCacheEnabled {
 		channelStatusLock.Lock()
@@ -685,6 +783,64 @@ func UpdateChannelStatus(channelId int, usingKey string, status int, reason stri
 		if err != nil {
 			common.SysLog(fmt.Sprintf("failed to update channel status: channel_id=%d, status=%d, error=%v", channel.Id, status, err))
 			return false
+		}
+	}
+	return true
+}
+
+func RemoveChannelKey(channelId int, usingKey string, reason string) bool {
+	if usingKey == "" {
+		return false
+	}
+
+	if common.MemoryCacheEnabled {
+		channelStatusLock.Lock()
+		channelCache, _ := CacheGetChannel(channelId)
+		if channelCache != nil && channelCache.ChannelInfo.IsMultiKey {
+			pollingLock := GetChannelPollingLock(channelId)
+			pollingLock.Lock()
+			_ = handlerMultiKeyRemove(channelCache, usingKey)
+			pollingLock.Unlock()
+		}
+		channelStatusLock.Unlock()
+	}
+
+	shouldUpdateAbilities := false
+	channel, err := GetChannelById(channelId, true)
+	if err != nil {
+		return false
+	}
+	if !channel.ChannelInfo.IsMultiKey {
+		return false
+	}
+
+	beforeStatus := channel.Status
+	pollingLock := GetChannelPollingLock(channelId)
+	pollingLock.Lock()
+	removed := handlerMultiKeyRemove(channel, usingKey)
+	pollingLock.Unlock()
+	if !removed {
+		return false
+	}
+	if beforeStatus != channel.Status {
+		shouldUpdateAbilities = true
+	}
+
+	err = DB.Model(channel).Select("key", "status", "channel_info", "other_info").Updates(Channel{
+		Key:         channel.Key,
+		Status:      channel.Status,
+		ChannelInfo: channel.ChannelInfo,
+		OtherInfo:   channel.OtherInfo,
+	}).Error
+	if err != nil {
+		common.SysLog(fmt.Sprintf("failed to remove channel key from pool: channel_id=%d, reason=%s, error=%v", channelId, reason, err))
+		return false
+	}
+
+	if shouldUpdateAbilities {
+		err = UpdateAbilityStatus(channelId, channel.Status == common.ChannelStatusEnabled)
+		if err != nil {
+			common.SysLog(fmt.Sprintf("failed to update ability status: channel_id=%d, error=%v", channelId, err))
 		}
 	}
 	return true

@@ -52,3 +52,44 @@ func TestHandlerMultiKeyUpdateEnableRestoresChannelStatus(t *testing.T) {
 		t.Fatalf("expected unrelated other_info fields to be preserved, got %v", got)
 	}
 }
+
+func TestHandlerMultiKeyRemoveRebuildsPoolState(t *testing.T) {
+	ch := &Channel{
+		Status: common.ChannelStatusEnabled,
+		Key:    "key-a\nkey-b\nkey-c",
+		ChannelInfo: ChannelInfo{
+			IsMultiKey:         true,
+			MultiKeySize:       3,
+			MultiKeyPollingIndex: 2,
+			MultiKeyStatusList: map[int]int{
+				2: common.ChannelStatusAutoDisabled,
+			},
+			MultiKeyDisabledReason: map[int]string{
+				2: "status_code=429, usage_limit_reached",
+			},
+			MultiKeyDisabledTime: map[int]int64{
+				2: 123,
+			},
+		},
+	}
+
+	if !handlerMultiKeyRemove(ch, "key-b") {
+		t.Fatal("expected key-b to be removed from multi-key pool")
+	}
+
+	if ch.Key != "key-a\nkey-c" {
+		t.Fatalf("unexpected key list after removal: %q", ch.Key)
+	}
+	if ch.ChannelInfo.MultiKeySize != 2 {
+		t.Fatalf("expected multi key size to become 2, got %d", ch.ChannelInfo.MultiKeySize)
+	}
+	if got := ch.ChannelInfo.MultiKeyPollingIndex; got != 1 {
+		t.Fatalf("expected polling index to be remapped to 1, got %d", got)
+	}
+	if got := ch.ChannelInfo.MultiKeyStatusList[1]; got != common.ChannelStatusAutoDisabled {
+		t.Fatalf("expected disabled key status to shift to new index 1, got %d", got)
+	}
+	if _, ok := ch.ChannelInfo.MultiKeyStatusList[2]; ok {
+		t.Fatal("expected removed index state to be deleted")
+	}
+}

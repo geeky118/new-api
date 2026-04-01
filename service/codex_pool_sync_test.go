@@ -154,3 +154,34 @@ func TestRemapCodexPoolKeyStatusByRefreshTokenFallback(t *testing.T) {
 		t.Fatalf("expected remapped disabled reason, got %q", got)
 	}
 }
+
+func TestFilterCodexPoolKeysByRejectedIdentities(t *testing.T) {
+	keys := []string{
+		`{"type":"codex","email":"a@example.com","account_id":"acc-a","access_token":"at-a","refresh_token":"rt-a"}`,
+		`{"type":"codex","email":"b@example.com","account_id":"acc-b","access_token":"at-b","refresh_token":"rt-b"}`,
+	}
+
+	filtered, skipped := filterCodexPoolKeysByRejectedIdentities(keys, map[string]struct{}{
+		"account:acc-a": {},
+	})
+
+	if skipped != 1 {
+		t.Fatalf("expected skipped=1, got %d", skipped)
+	}
+	if len(filtered) != 1 {
+		t.Fatalf("expected 1 remaining key, got %d", len(filtered))
+	}
+	if filtered[0] != keys[1] {
+		t.Fatalf("expected remaining key to be second key, got %q", filtered[0])
+	}
+}
+
+func TestExtractCodexPoolRejectedIdentities(t *testing.T) {
+	got := extractCodexPoolRejectedIdentities([]interface{}{"account:acc-a", "", 123, "email:a@example.com"})
+	if len(got) != 2 {
+		t.Fatalf("expected 2 valid identities, got %d", len(got))
+	}
+	if got[0] != "account:acc-a" || got[1] != "email:a@example.com" {
+		t.Fatalf("unexpected identities: %#v", got)
+	}
+}

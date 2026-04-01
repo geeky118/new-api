@@ -166,6 +166,22 @@ func runCodexPoolHealthCheckOnce(cfg codexPoolHealthCheckConfig) {
 	for idx, rawKey := range keys {
 		scanned++
 		currentStatus := codexPoolKeyStatus(ch, idx)
+		if currentStatus == common.ChannelStatusAutoDisabled {
+			removed, deletedNow := RemoveChannelKeyPermanentlyFromPoolWithTokenDir(
+				*types.NewChannelError(ch.Id, ch.Type, ch.Name, ch.ChannelInfo.IsMultiKey, strings.TrimSpace(rawKey), ch.GetAutoBan()),
+				"historical auto-disabled key removed by codex pool health check",
+				cfg.TokenDir,
+			)
+			if removed {
+				disabled++
+				cacheReset = true
+				if deletedNow > 0 {
+					deletedFiles += deletedNow
+					fileRecords, _ = collectCodexPoolTokenFileRecords(cfg.TokenDir)
+				}
+			}
+			continue
+		}
 		finalKey, apiErr, _, probeErr := probeCodexPoolCredential(
 			ctx,
 			client,
@@ -204,12 +220,6 @@ func runCodexPoolHealthCheckOnce(cfg codexPoolHealthCheckConfig) {
 
 		if apiErr == nil {
 			healthy++
-			if currentStatus == common.ChannelStatusAutoDisabled && common.AutomaticEnableChannelEnabled {
-				if model.UpdateChannelStatus(ch.Id, usingKey, common.ChannelStatusEnabled, "") {
-					reEnabled++
-					cacheReset = true
-				}
-			}
 			continue
 		}
 
@@ -218,6 +228,23 @@ func runCodexPoolHealthCheckOnce(cfg codexPoolHealthCheckConfig) {
 		}
 
 		reason := buildCodexPoolDisableReason(apiErr)
+		if ShouldRemoveChannelKeyFromPool(*types.NewChannelError(ch.Id, ch.Type, ch.Name, ch.ChannelInfo.IsMultiKey, usingKey, ch.GetAutoBan()), apiErr) {
+			removed, deletedNow := RemoveChannelKeyPermanentlyFromPoolWithTokenDir(
+				*types.NewChannelError(ch.Id, ch.Type, ch.Name, ch.ChannelInfo.IsMultiKey, usingKey, ch.GetAutoBan()),
+				reason,
+				cfg.TokenDir,
+			)
+			if removed {
+				disabled++
+				cacheReset = true
+				if deletedNow > 0 {
+					deletedFiles += deletedNow
+					fileRecords, _ = collectCodexPoolTokenFileRecords(cfg.TokenDir)
+				}
+			}
+			continue
+		}
+
 		if model.UpdateChannelStatus(ch.Id, usingKey, common.ChannelStatusAutoDisabled, reason) {
 			disabled++
 			cacheReset = true
@@ -509,6 +536,33 @@ func deleteCodexPoolTokenFiles(records []codexPoolTokenFileRecord, rawKey string
 	paths := matchCodexPoolTokenFilePaths(records, rawKey)
 	deleted := 0
 	for _, path := range paths {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return deleted, err
+		}
+		deleted++
+	}
+	return deleted, nil
+}
+
+func DeleteCodexPoolTokenFilesByKey(tokenDir string, rawKey string) (int, error) {
+	records, err := collectCodexPoolTokenFileRecords(tokenDir)
+	if err != nil {
+		return 0, err
+	}
+	return deleteCodexPoolTokenFiles(records, rawKey)
+}
+
+func DeleteAllCodexPoolTokenFiles(tokenDir string) (int, error) {
+	records, err := collectCodexPoolTokenFileRecords(tokenDir)
+	if err != nil {
+		return 0, err
+	}
+	deleted := 0
+	for _, record := range records {
+		path := strings.TrimSpace(record.FilePath)
+		if path == "" {
+			continue
+		}
 		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 			return deleted, err
 		}

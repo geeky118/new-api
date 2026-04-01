@@ -19,6 +19,7 @@ type codexPoolAutoConfig struct {
 	Enabled         bool
 	ChannelID       int
 	TokenDir        string
+	DeleteSyncedFiles bool
 	SyncInterval    time.Duration
 	MinEnabledKeys  int
 	RegisterEnabled bool
@@ -101,6 +102,10 @@ func loadCodexPoolAutoConfigFromEnv() codexPoolAutoConfig {
 	if poolSetting.AutoRegisterEnabled {
 		registerEnabled = true
 	}
+	deleteSyncedFiles := common.GetEnvOrDefaultBool("CODEX_POOL_SYNC_DELETE_IMPORTED_FILES", true)
+	if poolSetting.DeleteSyncedTokenFiles {
+		deleteSyncedFiles = true
+	}
 
 	enabled := common.GetEnvOrDefaultBool("CODEX_POOL_AUTO_SYNC_ENABLED", false)
 	if poolSetting.AutoRegisterEnabled {
@@ -111,6 +116,7 @@ func loadCodexPoolAutoConfigFromEnv() codexPoolAutoConfig {
 		Enabled:         enabled,
 		ChannelID:       common.GetEnvOrDefault("CODEX_POOL_CHANNEL_ID", 0),
 		TokenDir:        strings.TrimSpace(DefaultCodexPoolTokenDir()),
+		DeleteSyncedFiles: deleteSyncedFiles,
 		SyncInterval:    time.Duration(intervalSec) * time.Second,
 		MinEnabledKeys:  minEnabledKeys,
 		RegisterEnabled: registerEnabled,
@@ -133,6 +139,11 @@ func runCodexPoolAutoUpdateOnce(cfg codexPoolAutoConfig) {
 
 	syncRes, err := SyncCodexChannelFromTokenDir(cfg.ChannelID, cfg.TokenDir)
 	if err != nil {
+		if cfg.DeleteSyncedFiles && (strings.Contains(err.Error(), "no valid codex oauth keys found") || strings.Contains(err.Error(), "no importable codex oauth keys found")) {
+			syncRes, err = BuildCodexPoolSyncResultFromChannel(cfg.ChannelID, cfg.TokenDir)
+		}
+	}
+	if err != nil {
 		logger.LogWarn(ctx, fmt.Sprintf("codex pool auto-update: sync failed: %v", err))
 		return
 	}
@@ -149,6 +160,13 @@ func runCodexPoolAutoUpdateOnce(cfg codexPoolAutoConfig) {
 			syncRes.FilesTotal,
 			syncRes.FilesInvalid,
 		)
+	}
+	if cfg.DeleteSyncedFiles {
+		if deleted, deleteErr := DeleteAllCodexPoolTokenFiles(cfg.TokenDir); deleteErr != nil {
+			logger.LogWarn(ctx, fmt.Sprintf("codex pool auto-update: delete synced token files failed: %v", deleteErr))
+		} else if deleted > 0 {
+			logger.LogInfo(ctx, fmt.Sprintf("codex pool auto-update: deleted %d synced token files after sync", deleted))
+		}
 	}
 
 	if !cfg.RegisterEnabled || cfg.MinEnabledKeys <= 0 {
@@ -203,11 +221,23 @@ func runCodexPoolAutoUpdateOnce(cfg codexPoolAutoConfig) {
 
 	afterRes, err := SyncCodexChannelFromTokenDir(cfg.ChannelID, cfg.TokenDir)
 	if err != nil {
+		if cfg.DeleteSyncedFiles && (strings.Contains(err.Error(), "no valid codex oauth keys found") || strings.Contains(err.Error(), "no importable codex oauth keys found")) {
+			afterRes, err = BuildCodexPoolSyncResultFromChannel(cfg.ChannelID, cfg.TokenDir)
+		}
+	}
+	if err != nil {
 		logger.LogWarn(ctx, fmt.Sprintf("codex pool auto-update: sync after register failed: %v", err))
 		return
 	}
 
 	if afterRes.EnabledKeys >= cfg.MinEnabledKeys {
+		if cfg.DeleteSyncedFiles {
+			if deleted, deleteErr := DeleteAllCodexPoolTokenFiles(cfg.TokenDir); deleteErr != nil {
+				logger.LogWarn(ctx, fmt.Sprintf("codex pool auto-update: delete synced token files after register failed: %v", deleteErr))
+			} else if deleted > 0 {
+				logger.LogInfo(ctx, fmt.Sprintf("codex pool auto-update: deleted %d synced token files after register", deleted))
+			}
+		}
 		logger.LogInfo(
 			ctx,
 			fmt.Sprintf(
@@ -220,6 +250,14 @@ func runCodexPoolAutoUpdateOnce(cfg codexPoolAutoConfig) {
 			),
 		)
 		return
+	}
+
+	if cfg.DeleteSyncedFiles {
+		if deleted, deleteErr := DeleteAllCodexPoolTokenFiles(cfg.TokenDir); deleteErr != nil {
+			logger.LogWarn(ctx, fmt.Sprintf("codex pool auto-update: delete synced token files after partial register failed: %v", deleteErr))
+		} else if deleted > 0 {
+			logger.LogInfo(ctx, fmt.Sprintf("codex pool auto-update: deleted %d synced token files after partial register", deleted))
+		}
 	}
 
 	logger.LogWarn(

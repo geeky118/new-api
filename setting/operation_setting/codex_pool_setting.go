@@ -6,6 +6,7 @@ type CodexPoolSetting struct {
 	AutoHealthCheckEnabled       bool `json:"auto_health_check_enabled"`
 	AutoHealthCheckMinutes       int  `json:"auto_health_check_minutes"`
 	DeleteInvalidTokenFiles      bool `json:"delete_invalid_token_files"`
+	DeleteSyncedTokenFiles       bool `json:"delete_synced_token_files"`
 	AutoRegisterEnabled          bool `json:"auto_register_enabled"`
 	MinEnabledKeys               int  `json:"min_enabled_keys"`
 	AutoRegisterMinutes          int  `json:"auto_register_minutes"`
@@ -17,6 +18,7 @@ var codexPoolSetting = CodexPoolSetting{
 	AutoHealthCheckEnabled:   false,
 	AutoHealthCheckMinutes:   10,
 	DeleteInvalidTokenFiles:  false,
+	DeleteSyncedTokenFiles:   true,
 	AutoRegisterEnabled:      false,
 	MinEnabledKeys:           70,
 	AutoRegisterMinutes:      5,

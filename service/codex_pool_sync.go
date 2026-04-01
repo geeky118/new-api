@@ -12,6 +12,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 )
 
 type CodexPoolSyncResult struct {
@@ -48,8 +49,133 @@ type codexPoolDisabledState struct {
 	Reason string
 }
 
+const codexPoolRejectedIdentitiesKey = "codex_pool_rejected_identities"
+
 func DefaultCodexPoolTokenDir() string {
 	return common.GetEnvOrDefaultString("CODEX_POOL_TOKEN_DIR", "chatgpt_register_v2_by_AI/tokens")
+}
+
+func shouldDeleteSyncedCodexPoolTokenFiles() bool {
+	if common.GetEnvOrDefaultBool("CODEX_POOL_SYNC_DELETE_IMPORTED_FILES", true) {
+		return true
+	}
+	poolSetting := operation_setting.GetCodexPoolSetting()
+	return poolSetting != nil && poolSetting.DeleteSyncedTokenFiles
+}
+
+func extractCodexPoolRejectedIdentities(value interface{}) []string {
+	switch v := value.(type) {
+	case nil:
+		return nil
+	case []string:
+		result := make([]string, 0, len(v))
+		for _, item := range v {
+			item = strings.TrimSpace(item)
+			if item != "" {
+				result = append(result, item)
+			}
+		}
+		return result
+	case []interface{}:
+		result := make([]string, 0, len(v))
+		for _, item := range v {
+			text, ok := item.(string)
+			if !ok {
+				continue
+			}
+			text = strings.TrimSpace(text)
+			if text != "" {
+				result = append(result, text)
+			}
+		}
+		return result
+	default:
+		return nil
+	}
+}
+
+func getCodexPoolRejectedIdentitySet(ch *model.Channel) map[string]struct{} {
+	if ch == nil {
+		return nil
+	}
+
+	info := ch.GetOtherInfo()
+	identities := extractCodexPoolRejectedIdentities(info[codexPoolRejectedIdentitiesKey])
+	if len(identities) == 0 {
+		return nil
+	}
+
+	result := make(map[string]struct{}, len(identities))
+	for _, identity := range identities {
+		identity = strings.TrimSpace(identity)
+		if identity == "" {
+			continue
+		}
+		result[identity] = struct{}{}
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
+}
+
+func filterCodexPoolKeysByRejectedIdentities(keys []string, rejected map[string]struct{}) ([]string, int) {
+	if len(keys) == 0 || len(rejected) == 0 {
+		return keys, 0
+	}
+
+	filtered := make([]string, 0, len(keys))
+	skipped := 0
+	for _, rawKey := range keys {
+		blocked := false
+		for _, identity := range buildCodexPoolStatusIdentities(rawKey) {
+			if _, ok := rejected[identity]; ok {
+				blocked = true
+				break
+			}
+		}
+		if blocked {
+			skipped++
+			continue
+		}
+		filtered = append(filtered, rawKey)
+	}
+	return filtered, skipped
+}
+
+func BuildCodexPoolSyncResultFromChannel(channelID int, tokenDir string) (*CodexPoolSyncResult, error) {
+	if channelID <= 0 {
+		return nil, fmt.Errorf("invalid channel id")
+	}
+
+	ch, err := model.GetChannelById(channelID, true)
+	if err != nil {
+		return nil, err
+	}
+	if ch == nil {
+		return nil, fmt.Errorf("channel not found")
+	}
+	if ch.Type != constant.ChannelTypeCodex {
+		return nil, fmt.Errorf("channel type is not Codex")
+	}
+
+	keys := ch.GetKeys()
+	disabledCount := len(ch.ChannelInfo.MultiKeyStatusList)
+	if disabledCount > len(keys) {
+		disabledCount = len(keys)
+	}
+
+	return &CodexPoolSyncResult{
+		ChannelID:    channelID,
+		TokenDir:     strings.TrimSpace(tokenDir),
+		FilesTotal:   0,
+		FilesLoaded:  0,
+		FilesInvalid: 0,
+		TotalKeys:    len(keys),
+		EnabledKeys:  len(keys) - disabledCount,
+		DisabledKeys: disabledCount,
+		Updated:      false,
+	}, nil
 }
 
 func SyncCodexChannelFromTokenDir(channelID int, tokenDir string) (*CodexPoolSyncResult, error) {
@@ -70,9 +196,6 @@ func SyncCodexChannelFromTokenDir(channelID int, tokenDir string) (*CodexPoolSyn
 	if err != nil {
 		return nil, err
 	}
-	if len(keys) == 0 {
-		return nil, fmt.Errorf("no valid codex oauth keys found in %s", dir)
-	}
 
 	ch, err := model.GetChannelById(channelID, true)
 	if err != nil {
@@ -84,6 +207,19 @@ func SyncCodexChannelFromTokenDir(channelID int, tokenDir string) (*CodexPoolSyn
 	if ch.Type != constant.ChannelTypeCodex {
 		return nil, fmt.Errorf("channel type is not Codex")
 	}
+	if len(keys) == 0 {
+		return nil, fmt.Errorf("no valid codex oauth keys found in %s", dir)
+	}
+
+	rejectedIdentities := getCodexPoolRejectedIdentitySet(ch)
+	filteredKeys, skippedRejected := filterCodexPoolKeysByRejectedIdentities(keys, rejectedIdentities)
+	if skippedRejected > 0 {
+		common.SysLog(fmt.Sprintf("codex pool sync: filtered %d rejected keys for channel_id=%d", skippedRejected, channelID))
+	}
+	keys = filteredKeys
+	if len(keys) == 0 {
+		return nil, fmt.Errorf("no importable codex oauth keys found in %s", dir)
+	}
 
 	previousInfo := ch.ChannelInfo
 	prevIsMultiKey := previousInfo.IsMultiKey
@@ -91,6 +227,8 @@ func SyncCodexChannelFromTokenDir(channelID int, tokenDir string) (*CodexPoolSyn
 	prevStatus := previousInfo.MultiKeyStatusList
 	prevTime := previousInfo.MultiKeyDisabledTime
 	prevReason := previousInfo.MultiKeyDisabledReason
+	prevChannelStatus := ch.Status
+	prevOtherInfo := ch.OtherInfo
 	prevKeys := ch.GetKeys()
 	prevKeyString := strings.TrimSpace(ch.Key)
 
@@ -117,6 +255,21 @@ func SyncCodexChannelFromTokenDir(channelID int, tokenDir string) (*CodexPoolSyn
 	} else {
 		ch.ChannelInfo.MultiKeyDisabledReason = newReason
 	}
+	if ch.Status != common.ChannelStatusManuallyDisabled {
+		if len(keys) > 0 && len(newStatus) >= len(keys) {
+			ch.Status = common.ChannelStatusAutoDisabled
+			info := ch.GetOtherInfo()
+			info["status_reason"] = "All keys are disabled"
+			info["status_time"] = common.GetTimestamp()
+			ch.SetOtherInfo(info)
+		} else {
+			ch.Status = common.ChannelStatusEnabled
+			info := ch.GetOtherInfo()
+			delete(info, "status_reason")
+			delete(info, "status_time")
+			ch.SetOtherInfo(info)
+		}
+	}
 
 	updated := shouldUpdateCodexPoolChannel(
 		prevKeyString,
@@ -131,6 +284,10 @@ func SyncCodexChannelFromTokenDir(channelID int, tokenDir string) (*CodexPoolSyn
 		ch.ChannelInfo.MultiKeyDisabledTime,
 		prevReason,
 		ch.ChannelInfo.MultiKeyDisabledReason,
+		prevChannelStatus,
+		ch.Status,
+		prevOtherInfo,
+		ch.OtherInfo,
 	)
 
 	if updated {
@@ -155,6 +312,12 @@ func SyncCodexChannelFromTokenDir(channelID int, tokenDir string) (*CodexPoolSyn
 		EnabledKeys:  len(keys) - disabledCount,
 		DisabledKeys: disabledCount,
 		Updated:      updated,
+	}
+
+	if shouldDeleteSyncedCodexPoolTokenFiles() {
+		if _, deleteErr := DeleteAllCodexPoolTokenFiles(dir); deleteErr != nil {
+			return nil, fmt.Errorf("sync succeeded but delete synced token files failed: %w", deleteErr)
+		}
 	}
 	return result, nil
 }
@@ -420,6 +583,10 @@ func shouldUpdateCodexPoolChannel(
 	newTime map[int]int64,
 	oldReason map[int]string,
 	newReason map[int]string,
+	oldChannelStatus int,
+	newChannelStatus int,
+	oldOtherInfo string,
+	newOtherInfo string,
 ) bool {
 	if oldKey != newKey {
 		return true
@@ -436,5 +603,11 @@ func shouldUpdateCodexPoolChannel(
 	if !reflect.DeepEqual(oldTime, newTime) {
 		return true
 	}
-	return !reflect.DeepEqual(oldReason, newReason)
+	if !reflect.DeepEqual(oldReason, newReason) {
+		return true
+	}
+	if oldChannelStatus != newChannelStatus {
+		return true
+	}
+	return oldOtherInfo != newOtherInfo
 }
