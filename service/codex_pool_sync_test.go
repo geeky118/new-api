@@ -185,3 +185,48 @@ func TestExtractCodexPoolRejectedIdentities(t *testing.T) {
 		t.Fatalf("unexpected identities: %#v", got)
 	}
 }
+
+func TestMergeCodexPoolKeysKeepsExistingPool(t *testing.T) {
+	existing := []string{
+		`{"type":"codex","email":"a@example.com","account_id":"acc-a","access_token":"at-a","refresh_token":"rt-a"}`,
+		`{"type":"codex","email":"b@example.com","account_id":"acc-b","access_token":"at-b","refresh_token":"rt-b"}`,
+	}
+	imported := []string{
+		`{"type":"codex","email":"c@example.com","account_id":"acc-c","access_token":"at-c","refresh_token":"rt-c"}`,
+	}
+
+	merged, importedCount := mergeCodexPoolKeys(existing, imported, nil)
+	if importedCount != 1 {
+		t.Fatalf("expected importedCount=1, got %d", importedCount)
+	}
+	if len(merged) != 3 {
+		t.Fatalf("expected merged key count 3, got %d", len(merged))
+	}
+	if merged[0] != existing[0] || merged[1] != existing[1] || merged[2] != imported[0] {
+		t.Fatalf("unexpected merged keys: %#v", merged)
+	}
+}
+
+func TestMergeCodexPoolKeysReplacesSameIdentity(t *testing.T) {
+	existing := []string{
+		`{"type":"codex","email":"a@example.com","account_id":"acc-a","access_token":"at-old","refresh_token":"rt-old"}`,
+		`{"type":"codex","email":"b@example.com","account_id":"acc-b","access_token":"at-b","refresh_token":"rt-b"}`,
+	}
+	imported := []string{
+		`{"type":"codex","email":"a@example.com","account_id":"acc-a","access_token":"at-new","refresh_token":"rt-new"}`,
+	}
+
+	merged, importedCount := mergeCodexPoolKeys(existing, imported, nil)
+	if importedCount != 1 {
+		t.Fatalf("expected importedCount=1, got %d", importedCount)
+	}
+	if len(merged) != 2 {
+		t.Fatalf("expected merged key count 2, got %d", len(merged))
+	}
+	if merged[0] != imported[0] {
+		t.Fatalf("expected first key to be replaced by imported key, got %q", merged[0])
+	}
+	if merged[1] != existing[1] {
+		t.Fatalf("expected second key to stay unchanged, got %q", merged[1])
+	}
+}

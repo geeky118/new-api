@@ -143,6 +143,70 @@ func filterCodexPoolKeysByRejectedIdentities(keys []string, rejected map[string]
 	return filtered, skipped
 }
 
+func isCodexPoolKeyRejected(rawKey string, rejected map[string]struct{}) bool {
+	if len(rejected) == 0 {
+		return false
+	}
+	for _, identity := range buildCodexPoolStatusIdentities(rawKey) {
+		if _, ok := rejected[identity]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func buildCodexPoolIdentityIndex(keys []string) map[string]int {
+	index := make(map[string]int)
+	for i, rawKey := range keys {
+		for _, identity := range buildCodexPoolStatusIdentities(rawKey) {
+			if identity == "" {
+				continue
+			}
+			if _, exists := index[identity]; !exists {
+				index[identity] = i
+			}
+		}
+	}
+	return index
+}
+
+func mergeCodexPoolKeys(existingKeys []string, importedKeys []string, rejected map[string]struct{}) ([]string, int) {
+	merged := make([]string, 0, len(existingKeys)+len(importedKeys))
+	for _, rawKey := range existingKeys {
+		rawKey = strings.TrimSpace(rawKey)
+		if rawKey == "" || isCodexPoolKeyRejected(rawKey, rejected) {
+			continue
+		}
+		merged = append(merged, rawKey)
+	}
+
+	importedCount := 0
+	for _, rawKey := range importedKeys {
+		rawKey = strings.TrimSpace(rawKey)
+		if rawKey == "" || isCodexPoolKeyRejected(rawKey, rejected) {
+			continue
+		}
+
+		identityIndex := buildCodexPoolIdentityIndex(merged)
+		replaceIdx := -1
+		for _, identity := range buildCodexPoolStatusIdentities(rawKey) {
+			if idx, ok := identityIndex[identity]; ok {
+				replaceIdx = idx
+				break
+			}
+		}
+
+		if replaceIdx >= 0 {
+			merged[replaceIdx] = rawKey
+		} else {
+			merged = append(merged, rawKey)
+		}
+		importedCount++
+	}
+
+	return merged, importedCount
+}
+
 func BuildCodexPoolSyncResultFromChannel(channelID int, tokenDir string) (*CodexPoolSyncResult, error) {
 	if channelID <= 0 {
 		return nil, fmt.Errorf("invalid channel id")
@@ -216,8 +280,7 @@ func SyncCodexChannelFromTokenDir(channelID int, tokenDir string) (*CodexPoolSyn
 	if skippedRejected > 0 {
 		common.SysLog(fmt.Sprintf("codex pool sync: filtered %d rejected keys for channel_id=%d", skippedRejected, channelID))
 	}
-	keys = filteredKeys
-	if len(keys) == 0 {
+	if len(filteredKeys) == 0 {
 		return nil, fmt.Errorf("no importable codex oauth keys found in %s", dir)
 	}
 
@@ -231,6 +294,14 @@ func SyncCodexChannelFromTokenDir(channelID int, tokenDir string) (*CodexPoolSyn
 	prevOtherInfo := ch.OtherInfo
 	prevKeys := ch.GetKeys()
 	prevKeyString := strings.TrimSpace(ch.Key)
+
+	keys, importedCount := mergeCodexPoolKeys(prevKeys, filteredKeys, rejectedIdentities)
+	if importedCount > 0 {
+		common.SysLog(fmt.Sprintf("codex pool sync: merged %d imported keys into channel_id=%d", importedCount, channelID))
+	}
+	if len(keys) == 0 {
+		return nil, fmt.Errorf("no active codex oauth keys available for channel %d after merge", channelID)
+	}
 
 	newStatus, newTime, newReason := remapCodexPoolKeyStatus(prevKeys, prevStatus, prevTime, prevReason, keys)
 
