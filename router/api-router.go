@@ -376,4 +376,12 @@ func SetApiRouter(router *gin.Engine) {
 			deploymentsRoute.DELETE("/:id", controller.DeleteDeployment)
 		}
 	}
+
+	v0ManagementRouter := router.Group("/v0/management")
+	v0ManagementRouter.Use(middleware.RouteTag("v0_management"))
+	v0ManagementRouter.Use(middleware.CodexPoolManagementAuth())
+	{
+		v0ManagementRouter.GET("/auth-files", controller.GetCodexPoolManagementAuthFiles)
+		v0ManagementRouter.POST("/auth-files", controller.UploadCodexPoolManagementAuthFile)
+	}
 }

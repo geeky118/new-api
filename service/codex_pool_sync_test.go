@@ -230,3 +230,43 @@ func TestMergeCodexPoolKeysReplacesSameIdentity(t *testing.T) {
 		t.Fatalf("expected second key to stay unchanged, got %q", merged[1])
 	}
 }
+
+func TestNormalizeImportedCodexOAuthKey(t *testing.T) {
+	key, err := normalizeImportedCodexOAuthKey(&CodexOAuthKey{
+		Type:         " CODEX ",
+		Email:        " User@Example.Com ",
+		AccountID:    " acc-1 ",
+		AccessToken:  " at-1 ",
+		RefreshToken: " rt-1 ",
+		IDToken:      " id-1 ",
+	})
+	if err != nil {
+		t.Fatalf("normalize imported key failed: %v", err)
+	}
+	if key.Type != "codex" {
+		t.Fatalf("expected type codex, got %q", key.Type)
+	}
+	if key.Email != "user@example.com" {
+		t.Fatalf("expected normalized email, got %q", key.Email)
+	}
+	if key.AccountID != "acc-1" {
+		t.Fatalf("expected normalized account id, got %q", key.AccountID)
+	}
+	if key.AccessToken != "at-1" || key.RefreshToken != "rt-1" || key.IDToken != "id-1" {
+		t.Fatalf("expected tokens to be trimmed, got %#v", key)
+	}
+	if key.LastRefresh == "" {
+		t.Fatalf("expected last_refresh to be populated")
+	}
+}
+
+func TestNormalizeImportedCodexOAuthKeyRejectsUnsupportedType(t *testing.T) {
+	_, err := normalizeImportedCodexOAuthKey(&CodexOAuthKey{
+		Type:        "openai",
+		AccountID:   "acc-1",
+		AccessToken: "at-1",
+	})
+	if err == nil {
+		t.Fatalf("expected unsupported type error")
+	}
+}

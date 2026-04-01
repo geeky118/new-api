@@ -261,6 +261,81 @@ func SyncCodexChannelFromTokenDir(channelID int, tokenDir string) (*CodexPoolSyn
 		return nil, err
 	}
 
+	return syncCodexChannelPool(channelID, keys, dir, stats)
+}
+
+func ImportCodexChannelOAuthKey(channelID int, oauthKey *CodexOAuthKey) (*CodexPoolSyncResult, error) {
+	if channelID <= 0 {
+		return nil, fmt.Errorf("invalid channel id")
+	}
+	normalized, err := normalizeImportedCodexOAuthKey(oauthKey)
+	if err != nil {
+		return nil, err
+	}
+
+	encoded, err := common.Marshal(normalized)
+	if err != nil {
+		return nil, err
+	}
+
+	return syncCodexChannelPool(channelID, []string{strings.TrimSpace(string(encoded))}, "", codexPoolCollectStats{
+		FilesTotal:  1,
+		FilesLoaded: 1,
+	})
+}
+
+func normalizeImportedCodexOAuthKey(oauthKey *CodexOAuthKey) (*CodexOAuthKey, error) {
+	if oauthKey == nil {
+		return nil, fmt.Errorf("codex oauth key is required")
+	}
+
+	normalized := *oauthKey
+	normalized.Type = strings.TrimSpace(strings.ToLower(normalized.Type))
+	normalized.Email = strings.TrimSpace(strings.ToLower(normalized.Email))
+	normalized.AccountID = strings.TrimSpace(normalized.AccountID)
+	normalized.AccessToken = strings.TrimSpace(normalized.AccessToken)
+	normalized.RefreshToken = strings.TrimSpace(normalized.RefreshToken)
+	normalized.IDToken = strings.TrimSpace(normalized.IDToken)
+	normalized.LastRefresh = strings.TrimSpace(normalized.LastRefresh)
+	normalized.Expired = strings.TrimSpace(normalized.Expired)
+
+	if normalized.Type == "" {
+		normalized.Type = "codex"
+	}
+	if normalized.Type != "codex" {
+		return nil, fmt.Errorf("unsupported auth file type: %s", normalized.Type)
+	}
+	if normalized.AccessToken == "" {
+		return nil, fmt.Errorf("access_token is required")
+	}
+	if normalized.AccountID == "" {
+		if accountID, ok := ExtractCodexAccountIDFromJWT(normalized.AccessToken); ok {
+			normalized.AccountID = strings.TrimSpace(accountID)
+		}
+	}
+	if normalized.AccountID == "" {
+		return nil, fmt.Errorf("account_id is required")
+	}
+	if normalized.Email == "" {
+		if email, ok := ExtractEmailFromJWT(normalized.AccessToken); ok {
+			normalized.Email = strings.TrimSpace(strings.ToLower(email))
+		}
+	}
+	if normalized.LastRefresh == "" {
+		normalized.LastRefresh = time.Now().Format(time.RFC3339)
+	}
+
+	return &normalized, nil
+}
+
+func syncCodexChannelPool(channelID int, importedKeys []string, tokenDir string, stats codexPoolCollectStats) (*CodexPoolSyncResult, error) {
+	if len(importedKeys) == 0 {
+		if tokenDir == "" {
+			return nil, fmt.Errorf("no valid codex oauth keys found")
+		}
+		return nil, fmt.Errorf("no valid codex oauth keys found in %s", tokenDir)
+	}
+
 	ch, err := model.GetChannelById(channelID, true)
 	if err != nil {
 		return nil, err
@@ -271,17 +346,17 @@ func SyncCodexChannelFromTokenDir(channelID int, tokenDir string) (*CodexPoolSyn
 	if ch.Type != constant.ChannelTypeCodex {
 		return nil, fmt.Errorf("channel type is not Codex")
 	}
-	if len(keys) == 0 {
-		return nil, fmt.Errorf("no valid codex oauth keys found in %s", dir)
-	}
 
 	rejectedIdentities := getCodexPoolRejectedIdentitySet(ch)
-	filteredKeys, skippedRejected := filterCodexPoolKeysByRejectedIdentities(keys, rejectedIdentities)
+	filteredKeys, skippedRejected := filterCodexPoolKeysByRejectedIdentities(importedKeys, rejectedIdentities)
 	if skippedRejected > 0 {
 		common.SysLog(fmt.Sprintf("codex pool sync: filtered %d rejected keys for channel_id=%d", skippedRejected, channelID))
 	}
 	if len(filteredKeys) == 0 {
-		return nil, fmt.Errorf("no importable codex oauth keys found in %s", dir)
+		if tokenDir == "" {
+			return nil, fmt.Errorf("no importable codex oauth keys found")
+		}
+		return nil, fmt.Errorf("no importable codex oauth keys found in %s", tokenDir)
 	}
 
 	previousInfo := ch.ChannelInfo
@@ -375,7 +450,7 @@ func SyncCodexChannelFromTokenDir(channelID int, tokenDir string) (*CodexPoolSyn
 	}
 	result := &CodexPoolSyncResult{
 		ChannelID:    channelID,
-		TokenDir:     dir,
+		TokenDir:     strings.TrimSpace(tokenDir),
 		FilesTotal:   stats.FilesTotal,
 		FilesLoaded:  stats.FilesLoaded,
 		FilesInvalid: stats.FilesInvalid,
@@ -385,8 +460,8 @@ func SyncCodexChannelFromTokenDir(channelID int, tokenDir string) (*CodexPoolSyn
 		Updated:      updated,
 	}
 
-	if shouldDeleteSyncedCodexPoolTokenFiles() {
-		if _, deleteErr := DeleteAllCodexPoolTokenFiles(dir); deleteErr != nil {
+	if tokenDir != "" && shouldDeleteSyncedCodexPoolTokenFiles() {
+		if _, deleteErr := DeleteAllCodexPoolTokenFiles(tokenDir); deleteErr != nil {
 			return nil, fmt.Errorf("sync succeeded but delete synced token files failed: %w", deleteErr)
 		}
 	}
