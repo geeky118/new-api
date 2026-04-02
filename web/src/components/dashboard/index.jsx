@@ -25,11 +25,13 @@ import { StatusContext } from '../../context/Status';
 import DashboardHeader from './DashboardHeader';
 import StatsCards from './StatsCards';
 import ChartsPanel from './ChartsPanel';
+import UserRankingsPanel from './UserRankingsPanel';
 import ApiInfoPanel from './ApiInfoPanel';
 import AnnouncementsPanel from './AnnouncementsPanel';
 import FaqPanel from './FaqPanel';
 import UptimePanel from './UptimePanel';
 import SearchModal from './modals/SearchModal';
+import UserInfoModal from '../table/usage-logs/modals/UserInfoModal';
 
 import { useDashboardData } from '../../hooks/dashboard/useDashboardData';
 import { useDashboardStats } from '../../hooks/dashboard/useDashboardStats';
@@ -87,12 +89,10 @@ const Dashboard = () => {
 
   // ========== 数据处理 ==========
   const initChart = async () => {
-    await dashboardData.loadQuotaData().then((data) => {
-      if (data && data.length > 0) {
-        dashboardCharts.updateChartData(data);
-      }
-    });
-    await dashboardData.loadUptimeData();
+    const data = await dashboardData.refresh();
+    if (data && data.length > 0) {
+      dashboardCharts.updateChartData(data);
+    }
   };
 
   const handleRefresh = async () => {
@@ -169,6 +169,16 @@ const Dashboard = () => {
         CARD_PROPS={CARD_PROPS}
         CHART_CONFIG={CHART_CONFIG}
       />
+
+      {dashboardData.isAdminUser && (
+        <UserRankingsPanel
+          userRankings={dashboardData.userRankings}
+          userRankingsLoading={dashboardData.userRankingsLoading}
+          showUserInfoFunc={dashboardData.showUserInfoFunc}
+          CARD_PROPS={CARD_PROPS}
+          t={dashboardData.t}
+        />
+      )}
 
       {/* API信息和图表面板 */}
       <div className='mb-4'>
@@ -264,6 +274,13 @@ const Dashboard = () => {
           </div>
         </div>
       )}
+
+      <UserInfoModal
+        showUserInfo={dashboardData.showUserInfo}
+        setShowUserInfoModal={dashboardData.setShowUserInfoModal}
+        userInfoData={dashboardData.userInfoData}
+        t={dashboardData.t}
+      />
     </div>
   );
 };

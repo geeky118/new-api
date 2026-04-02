@@ -21,6 +21,18 @@ type QuotaData struct {
 	Quota     int    `json:"quota" gorm:"default:0"`
 }
 
+type UserQuotaRanking struct {
+	UserID    int    `json:"user_id"`
+	Username  string `json:"username"`
+	CallCount int    `json:"call_count"`
+	TokenUsed int    `json:"token_used"`
+}
+
+type UserQuotaRankingResponse struct {
+	RequestCountRanking []UserQuotaRanking `json:"request_count_ranking"`
+	TokenUsedRanking    []UserQuotaRanking `json:"token_used_ranking"`
+}
+
 func UpdateQuotaData() {
 	for {
 		if common.DataExportEnabled {
@@ -125,4 +137,48 @@ func GetAllQuotaDates(startTime int64, endTime int64, username string) (quotaDat
 	//err = DB.Table("quota_data").Where("created_at >= ? and created_at <= ?", startTime, endTime).Find(&quotaDatas).Error
 	err = DB.Table("quota_data").Select("model_name, sum(count) as count, sum(quota) as quota, sum(token_used) as token_used, created_at").Where("created_at >= ? and created_at <= ?", startTime, endTime).Group("model_name, created_at").Find(&quotaDatas).Error
 	return quotaDatas, err
+}
+
+func GetQuotaUserRankings(startTime int64, endTime int64, username string, limit int) (*UserQuotaRankingResponse, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+
+	requestCountRanking := make([]UserQuotaRanking, 0, limit)
+	tokenUsedRanking := make([]UserQuotaRanking, 0, limit)
+
+	requestQuery := DB.Table("quota_data").
+		Select("user_id, username, sum(count) as call_count, sum(token_used) as token_used").
+		Where("created_at >= ? and created_at <= ?", startTime, endTime)
+	if username != "" {
+		requestQuery = requestQuery.Where("username = ?", username)
+	}
+	if err := requestQuery.
+		Group("user_id, username").
+		Order("call_count DESC").
+		Order("token_used DESC").
+		Limit(limit).
+		Find(&requestCountRanking).Error; err != nil {
+		return nil, err
+	}
+
+	tokenQuery := DB.Table("quota_data").
+		Select("user_id, username, sum(count) as call_count, sum(token_used) as token_used").
+		Where("created_at >= ? and created_at <= ?", startTime, endTime)
+	if username != "" {
+		tokenQuery = tokenQuery.Where("username = ?", username)
+	}
+	if err := tokenQuery.
+		Group("user_id, username").
+		Order("token_used DESC").
+		Order("call_count DESC").
+		Limit(limit).
+		Find(&tokenUsedRanking).Error; err != nil {
+		return nil, err
+	}
+
+	return &UserQuotaRankingResponse{
+		RequestCountRanking: requestCountRanking,
+		TokenUsedRanking:    tokenUsedRanking,
+	}, nil
 }
